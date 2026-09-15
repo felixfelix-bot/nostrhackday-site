@@ -150,59 +150,82 @@ work** (NIP-13 `["nonce",<counter>,<bits>]` tag) from **every** submission — k
 ephemeral alike (operator steer 2026-09-15: "make everyone submit proof of work"). Layers:
 
 1. **Honeypot field** (hidden input bots fill) + **min wall-clock time** before submit (e.g. ≥3s).
-2. **Proof of work (mandatory for all):** mine NIP-13 against the serialized kind-1337 event
-   (≈399 bytes) until the id's leading zero count ≥ required bits. See §5a for the ratchet.
+2. **Proof of work (mandatory for all, visible):** grind a keypair whose npub starts with the
+   leet prefix (e.g. 3 chars), then sign the kind-1337 event with it, and carry any per-rung
+   exact top-up as a NIP-13 `nonce` tag. See §5a for the ratchet + measured cost table.
 3. **Client-side submit gate:** disable button while mining+publishing, one submission per key.
 4. **Org's collection step dedupes by pubkey and manually vets** the short list — a human eye on
    the small set is the real anti-spam.
 5. *(Still skipped)* No zap-required, no CAPTCHA, no whitelist.
 
-### 5a. PoW ratchet — signer-agnostic, order-independent SET rule (operator-steered)
+### 5a. PoW — visible vanity-npub prefix + exact-rung nonce (operator-steered 2026-09-15)
 
-**PoW is signer-agnostic.** Mining rewrites only the `nonce` tag; the event `id` commits to it.
-So the page mines **once**, then whichever key signs (ephemeral in-browser or NIP-07) signs the
-**same** mined id + tags — signing is a separate step that does not re-mine. One code path for
-both identity modes. The id commits to the nonce, and the sig commits to the id, so verifying =
-recompute sha256 over (id-input) and check leading zeros, independent of which key signed.
+**Operator steer: "give everyone a vanity npub with the leet equivalent of `nostrhackday` at the
+beginning, make them publish an event saying they're coming, first one grinds until done, each
+consecutive one needs ≥2× the PoW of the ones already counted. Visualize the npubs like the
+demo."**
 
-**Do NOT ratchet only random-nsec (ephemeral) submissions.** A NIP-07 signature is
-indistinguishable, on the wire, from a scripted freshly-generated key, so any gate that treats
-"random key" as spam-able and "NIP-07" as trusted is immediately walk-around-able. Ratchet on a
-**verifiable property**: `vetted` (org allowlist / known contact) vs `everyone else`. Allowlisted
-RSVPs are accepted at the **floor**; everyone else competes in the **ladder**.
+The proof of work is **visible** — it is the npub's prefix. Anyone can read it; no verifier.
+This is exactly what `asymmetric-vanity-npubs/demo` renders (vanity zone green, anti-phish zone
+orange). We reuse that renderer.
 
-**Ladder (order-independent SET rule, kills backdating/reorder grief):**
-- Sort all submissions' difficulty `bits` DESC.
-- Accept the **longest prefix** where the k-th submission (0-indexed) satisfies `bits[k] ≥ BASE+k`.
-- `BASE` = floor (mandatory for all), `CAP` = highest tier; `+1` bit per rung (each rung = 2× the
-  previous rung's mining cost).
-- **Hard limit:** the ladder admits at most `CAP − BASE + 1` unvetted RSVPs. One 30-bit event can
-  only ever occupy slot 0 (it cannot manufacture slots 1..N at lower bit-counts than their rung
-  demands), so a single high-PoW spammer captures one anonymous seat and nothing more.
-- Vetted RSVPs do **not** consume ladder capacity (they only need the `BASE` floor).
+**Hard constraint (measured, cannot fake):** grinding a prefix of `L` leet chars costs `32^L`
+keypair generations. Real browser keygen ≈ **542 keys/sec single-thread** (measured, @noble/curves,
+pure-JS EC point-multiply — WASM does NOT speed this up, unlike sha256). ~4 workers ≈ 1,800/s.
 
-**Locked parameters (measured 2026-09-15, i7-7600U, 399-byte event):**
+| prefix L (leet chars) | = bits | tries | wall @1800/s (4w) | wall @542/s (1w) |
+|---|---|---|---|---|
+| 2 | 10 | 1,024 | 0.6 s | 1.9 s |
+| 3 | 15 | 32,768 | 18 s | 60 s |
+| 4 | 20 | 1,048,576 | 9.7 min | 32 min |
+| 5 | 25 | 3.36e7 | 5.2 h | 17 h |
+| 13 (full `nostrhackday` leet) | 65 | 3.7e19 | **≈6.5e8 years** | — |
+
+**Full leet of `nostrhackday` is impossible** — 2^65 tries ≈ 10¹⁹ at 1,800/s ≈ 6.5×10⁸ years.
+The honest design uses a **short leet prefix that is the visible proof of "I ground for this"**
+(and matches the friendly floor of the earlier NIP-13 BASE=16≈3 chars), with the exact ≥2×
+per-rung demand carried by a **NIP-13 nonce on the event** (chars are quantized at 5 bits; they
+cannot express a smooth 2× ladder).
+
+**Identity model (per §2, unchanged + npub):** the page mines a keypair until its npub starts with
+the required leet prefix, then signs the kind-1337 RSVP with that **ephemeral key** (discarded, or
+offered for localStorage export). NIP-07 users may sign with their real key instead — but then
+their real npub isn't leet-minted, so a NIP-07 signer with a full-leet real npub is *rare*; to keep
+the ratchet honest and signer-agnostic we do **not** trust "NIP-07 = legit". Instead: **every
+RSVP must be signed by a key whose npub meets the ladder prefix**, so NIP-07 users are welcome but
+still must provide a minted key (we can even offer to derive one and let NIP-07 sign its event —
+signing-key ≠ event-key is fine in Nostr as long as the published event's pubkey is the minted one).
+
+**Ladder (order-independent SET rule — same as prior §5a, now over prefix length + nonce bits):**
+- Sort submissions by total difficulty DESC.
+- Accept the longest prefix where the k-th submission (0-indexed) satisfies
+  `difficulty_k ≥ BASE + k` difficulty-steps, each step = 2× (one NIP-13 bit).
+- A vanity prefix of L chars contributes `5L` base bits, **topped up with a NIP-13 `nonce` tag**
+  to hit the exact rung. So difficulty = `5L + nonce_bits`, expressible to the bit.
+- `BASE` = floor mandatory for all; `CAP` = highest rung; ladder admits ≤ `CAP−BASE+1` unvetted
+  RSVPs. A single high-difficulty spammer occupies slot 0 only (cannot backdate slots 1..N).
+- **Vetted** (org allowlist / known contact) accepted at `BASE` floor, don't consume ladder seats.
+
+**Locked parameters** (grounded in the 2^5-per-char keygen cost — see table):
 
 | Param | Value | Basis |
 |-------|-------|-------|
-| BASE | 16 | desktop WASM 1.5s, pure-JS desktop 1.5s, mobile WASM 3.6s, mobile pure-JS 6s — comfortable floor |
-| CAP | 22 | 7 unvetted seats; worst rung 22 = 14s desktop-WASM (90s pure-JS) only at the 7th seat |
-| step | +1 bit / 2 accepted | operator steer |
-| miner | WASM (hash-wasm) in Web Workers ≤`navigator.hardwareConcurrency` (cap 4), @noble pure-JS single-thread fallback | measured 290k h/s (4w) / 196k (wasm-single) / 44k (pure-JS chrome) |
-| SET rule | sort bits DESC, accept longest prefix `bits[k] ≥ BASE+k` | kills reorder/backdate + grief |
+| BASE | 3 leet chars = 2^15 (32K tries) + 0 nonce | 18 s @4w / 60 s @1w — friendly floor, visible `npub1n<3chars>...` |
+| CAP | 5 leet chars + 4 nonce = 2^29 | ~4.3 h @1800/s single high-attacker; vetted unaffected |
+| step | +1 difficulty-bit (2×) per accepted unvetted RSVP; prefix top-ups in +1-char jumps, nonce fills exact rung | operator steer "≥2×" |
+| SET rule | sort total difficulty DESC, accept longest prefix `diff_k ≥ BASE+k` | kills reorder/backdate + grief |
+| miner | browser keygen (542/s @1w, ~1800/s @4w WASM-independent) | measured on this box |
+| visible | `npub1` + leet prefix rendered with asymmetric-vanity-npubs viz (green vanity / orange anti-phish) | reuse demo renderer |
 
-Measured mining seconds (pure-JS chrome fallback, worst universal path): 16→1.5s, 18→5.9s,
-20→23.6s, 22→94.5s. With WASM workers: 16→0.2s, 20→3.6s, 22→14.4s. Mobile ≈ 4× slower: 16→0.9s,
-20→14.4s (WASM multi-worker estimate 72.6k h/s).
+> With BASE=3 the npub prefix is `npub1` + **3 leet chars** (e.g. `npub1n0s...` for "no"—we pick
+> common leet of `nostrhackday`: n0,5t,h4,ck,d4y...). That is genuinely 2^15 ≈ 32K keygen tries,
+> visible in the npub, and takes ~1 min on a laptop. The **full word is 10⁹ years** — surfaced
+> here so we never claim otherwise.
 
-The gate is a **friction + bounded-capacity** defense, not crypto-economics: it stops instant
-flooding and caps anonymous seats at 7, then the org's manual vetting of that small set is the
-final word (a bot can mine all 7 seats in ~29s but gains nothing more than 7 rows a human reads).
-
-**Shared module `pow-ratchet.js`** (used verbatim by: signup page, org collection script, Playwright
-test): `powMine(event, bits)` (returns id+nonce), `powVerify(id, event, bits)`, and
-`acceptSet(submissions, {BASE, CAP})` implementing the SET rule. Single source of truth so the page
-mining, the collection script, and the test all agree on the ratchet.
+**Shared module `pow-ratchet.js`** — now two functions, same single-source-of-truth contract:
+`vanityMine(targetChars, nonceBits)` → returns the keypair whose npub prefix matches AND whose
+event id passes the nonce; `verifyRsvp(event, {BASE, CAP})` recomputes prefix length + nonce bits
+and runs `acceptSet()`. Used by signup page, collection script, and Playwright test.
 
 ---
 
@@ -214,11 +237,12 @@ mining, the collection script, and the test all agree on the ratchet.
 - PR-kind to NIP registry (`kinds.md`) for `1337`.
 
 **Phase 1 — `signup.html` (½–1 day).**
-- Vanilla HTML+CSS (matching `style.css`)+JS; vendored `@noble/secp256k1` + `hash-wasm`.
-- Mine NIP-13 PoW once (shared `pow-ratchet.js`: WASM Web Workers ≤4, pure-JS fallback) at the
-  required bit level → then sign the mined event with ephemeral key OR NIP-07 (`window.nostr`) →
-  publish via WebSocket pool (4 public + org relay) → success/error UI; honeypot + min-time;
-  privacy note.
+- Vanilla HTML+CSS (matching `style.css`)+JS; vendored `@noble/secp256k1` + `@noble/curves`.
+- Grind a keypair to the required vanity-npub prefix (shared `pow-ratchet.js`: browser
+  keygen Web Workers ≤4 — WASM does NOT help EC point-multiply, measured 542/s @1w) + any
+  exact-rung NIP-13 nonce → sign the kind-1337 event with the minted ephemeral key → publish
+  via WebSocket pool (4 public + org relay) → success/error UI showing the minted npub;
+  honeypot + min-time; privacy note.
 - `pow-ratchet.js` also ships the SET-rule `acceptSet()` so the collection script + Playwright
   test consume the same ratchet as the page.
 
