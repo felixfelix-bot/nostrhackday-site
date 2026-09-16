@@ -1,0 +1,15 @@
+# GitHub Pages runs a Jekyll build on every push (the Actions-based
+# "pages-build-deployment" workflow), and Jekyll silently drops every file whose
+# name starts with an underscore or a dot. Our vendored esm.sh mirror of
+# @noble/hashes ships two such chunks — `_md.mjs` and `_u64.mjs` — which
+# sha2/hmac import. Without the include list below they 404 on GitHub Pages, the
+# mining worker's import chain dies, and the proof-of-work visualisation never
+# starts (the nsite gateway is unaffected).
+#
+# NOTE: a `.nojekyll` file at the repo root does NOT help here — the Pages
+# Actions Jekyll step ignores it and builds anyway. Verified against
+# ghcr.io/actions/jekyll-build-pages:v1.0.13 locally. Only `include:` rescues
+# underscore-prefixed entries (they are matched by basename).
+include:
+  - _md.mjs
+  - _u64.mjs
