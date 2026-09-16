@@ -68,19 +68,16 @@
         <section class="panel" id="intro">
             <h2>Sign up with proof of work</h2>
             <p>
-                No accounts, no emails, no server. Your RSVP is a
-                <strong>nostr event (kind 1337)</strong> signed by a key that is generated
-                here in your browser and <em>never leaves it</em>. To be counted it must carry
-                real, verifiable work: a <strong>leet npub prefix</strong> you can check with
-                your own eyes (<span class="npub"><span class="npub-vanity">n05</span></span>…)
-                plus a <strong>NIP-13 nonce</strong> that meets the current ladder rung.
+                No accounts, no server. Your RSVP is a <strong>nostr event (kind 1337)</strong> signed
+                by a key generated in this tab that <em>never leaves it</em>. To be counted it must
+                carry real work: a <strong>leet npub prefix</strong> you can check with your own eyes
+                (<span class="npub"><span class="npub-vanity">n05</span></span>…) plus a
+                <strong>NIP-13 nonce</strong> meeting the current rung.
             </p>
             <p class="muted small">
-                The counter below is live: it is an applesauce <code>EventStore</code> fed by public relays
-                and read through a reactive query, so accepted RSVPs and the current required difficulty
-                update as events land. Verification runs in your browser too — the event id is recomputed,
-                the signature is checked, and the leading zero bits are counted locally. The declared
-                nonce value is never trusted.
+                The counter is live — an applesauce <code>EventStore</code> fed by public relays.
+                Verification also runs locally: the id is recomputed, the signature checked, the
+                leading zero bits counted. The declared nonce is never trusted.
             </p>
             <ul class="ladder" id="ladder"></ul>
             <p class="muted small" id="cap-note"></p>
@@ -90,15 +87,11 @@
         <section class="panel mine-panel" id="mining">
             <h2 class="mine-title">MINING YOUR NPUB <span class="mine-badge">live proof of work</span></h2>
             <p class="mine-lead">
-                This panel is not a progress bar on top of a form. Right now, in this tab, your browser is
-                <strong>grinding real nostr keypairs</strong> on every core it can grab — a few thousand
-                signatures per second — and keeping the one whose <strong>npub spells the leet
-                target</strong>. Every matched character is 5 bits of genuine, verifiable work:
-                <strong>the mined prefix IS the visible proof</strong>, and you can read it off the screen
-                without trusting anybody. The <strong>fingerprint grid</strong> below re-renders the
-                characters of the candidate being tried right now, one fixed colour per character, so you
-                watch the search walk the key space. There is no signup server and no email — nothing
-                leaves this tab.
+                Right now your browser is <strong>grinding real nostr keypairs</strong> on every core it
+                can grab, and keeping the one whose <strong>npub spells the leet target</strong>. Every
+                matched character is 5 bits of real work: <strong>the mined prefix IS the
+                proof</strong>. The grid below shows the candidate being tried right now — one fixed
+                colour per character.
             </p>
             <div id="grind">
                 <!-- filled by js/viz.js; shipped empty so the grid frame exists in the served HTML -->
@@ -164,9 +157,8 @@
                 <p class="checkbox-row" style="margin-top:1rem">
                     <input type="checkbox" id="f-consent" name="consent">
                     <label for="f-consent">
-                        I understand this RSVP is a public nostr event published to public relays: the
-                        fields above, my npub and the proof of work are all public. No email, no tracking,
-                        no backend — everything happens in this tab.
+                        This RSVP is public: the fields above, my npub and the proof of work get
+                        published to public relays. No email, no tracking.
                     </label>
                 </p>
                 <p class="checkbox-row">
@@ -195,9 +187,8 @@
             <div class="relay-chips" id="relay-chips"></div>
             <ul class="rsvp-list" id="counter-list"></ul>
             <p class="muted small">
-                rejected / illegible events: <span id="counter-rejected">0</span> —
-                events that fail id re-computation, signature checks, the vanity floor, the nonce claim
-                or the current rung do not count and never take a seat.
+                rejected: <span id="counter-rejected">0</span> — bad id, bad signature, or below the
+                floor/rung. They never take a seat.
             </p>
         </section>
 
@@ -214,8 +205,8 @@
             <ul class="publish-log" id="publish-log"></ul>
             <textarea class="nsec-out" id="nsec-out" rows="2" readonly hidden></textarea>
             <p class="muted small">
-                Your key lives only in this tab. Export it if you want to keep the npub — the
-                proof of work belongs to that key, not to you, so a lost key means a lost RSVP.
+                The key lives only in this tab. Export it to keep the npub — the work belongs to the
+                key, not to you.
             </p>
             <div class="result-actions">
                 <button type="button" class="ghost" id="download-key">Download key file</button>
@@ -224,9 +215,8 @@
         </section>
 
         <p class="panel-note muted small">
-            In-browser only: no signup server, no cookies, no analytics. Assets are vendored locally
-            (see <code>vendor/VENDOR.md</code>); the verifier is <code>js/pow-ratchet.js</code>, shared
-            with the org collection script and the test suite.
+            In-browser only: no server, no cookies, no analytics. Assets vendored locally
+            (<code>vendor/VENDOR.md</code>); verifier is <code>js/pow-ratchet.js</code>.
         </p>
     </section>
   </main>
