@@ -9,6 +9,7 @@
     --color-border: #404040;
     
     --font-family-primary: 'Manusquared', monospace;
+    --font-family-body:    'Manusquared', monospace;
     
     --spacing-xs: 0.25rem;
     --spacing-sm: 0.5rem;
@@ -76,6 +77,7 @@ body {
     justify-content: center;
     padding: var(--spacing-lg);
     min-height: 100vh;
+    font-size: 17px;
 }
 
 /* Card Container */
@@ -156,10 +158,11 @@ body {
 }
 
 .event-tagline {
-    font-size: 1rem;
+    font-size: clamp(1rem, 2.5vw, 1.2rem);
     font-weight: 400;
-    letter-spacing: 0.05em;
-    opacity: 0.8;
+    letter-spacing: 0.04em;
+    line-height: 1.6;
+    opacity: 0.9;
     color: var(--color-primary);
 }
 

@@ -27,23 +27,24 @@
 }
 
 .panel h2 {
-    font-size: 0.95rem;
-    letter-spacing: 0.12em;
+    font-size: 1rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
     text-transform: uppercase;
     color: var(--color-primary);
     margin-bottom: var(--spacing-sm);
 }
 
 .panel h3 {
-    font-size: 1.05rem;
+    font-size: 1.1rem;
     margin: var(--spacing-md) 0 var(--spacing-xs);
     color: var(--color-secondary);
 }
 
 .panel p,
 .panel li {
-    font-size: 0.9rem;
-    line-height: 1.5;
+    font-size: 0.95rem;
+    line-height: 1.6;
 }
 
 .muted {
@@ -62,7 +63,7 @@ a {
 
 .npub {
     font-family: var(--nhd-mono);
-    font-size: 0.85rem;
+    font-size: 0.95rem;
     letter-spacing: 0.02em;
     word-break: break-all;
     white-space: normal;
@@ -121,8 +122,9 @@ a {
     display: flex;
     align-items: center;
     gap: var(--spacing-sm);
-    font-size: 0.75rem;
-    letter-spacing: 0.14em;
+    font-size: 0.8rem;
+    font-weight: 600;
+    letter-spacing: 0.05em;
     text-transform: uppercase;
     color: #9a9a9a;
 }
@@ -166,8 +168,9 @@ a {
 }
 
 .grind-headline-label {
-    font-size: 0.7rem;
-    letter-spacing: 0.14em;
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.05em;
     text-transform: uppercase;
     color: #9a9a9a;
 }
@@ -191,8 +194,9 @@ a {
 .grind-stat dt {
     color: #858585;
     text-transform: uppercase;
-    letter-spacing: 0.1em;
-    font-size: 0.65rem;
+    letter-spacing: 0.06em;
+    font-size: 0.68rem;
+    font-weight: 600;
 }
 
 .grind-stat dd {
@@ -214,8 +218,8 @@ a {
     display: flex;
     gap: var(--spacing-sm);
     align-items: baseline;
-    font-size: 0.72rem;
-    opacity: 0.55;
+    font-size: 0.78rem;
+    opacity: 0.7;
     animation: nhd-slide 0.25s ease-out;
 }
 
@@ -224,7 +228,7 @@ a {
 }
 
 .npub-row .npub {
-    font-size: 0.72rem;
+    font-size: 0.78rem;
 }
 
 .npub-score {
@@ -234,12 +238,14 @@ a {
 }
 
 .grind-legend {
-    font-size: 0.7rem;
+    font-size: 0.75rem;
+    font-weight: 500;
     color: #9a9a9a;
     display: flex;
     flex-wrap: wrap;
     gap: 0.4rem;
     align-items: center;
+    line-height: 1.5;
 }
 
 .legend-swatch {
@@ -314,10 +320,11 @@ a {
 }
 
 .ladder-rung {
-    font-size: 0.7rem;
+    font-size: 0.75rem;
+    font-weight: 500;
     border: 1px solid var(--color-border);
     border-radius: var(--border-radius-sm);
-    padding: 0.1rem 0.4rem;
+    padding: 0.12rem 0.4rem;
     color: #9a9a9a;
 }
 
@@ -339,8 +346,9 @@ a {
 }
 
 .field label {
-    font-size: 0.75rem;
-    letter-spacing: 0.1em;
+    font-size: 0.78rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
     text-transform: uppercase;
     color: #9a9a9a;
 }
@@ -386,7 +394,8 @@ a {
 button {
     font-family: var(--nhd-mono);
     font-size: 0.95rem;
-    letter-spacing: 0.1em;
+    font-weight: 600;
+    letter-spacing: 0.06em;
     text-transform: uppercase;
     background: var(--nhd-orange);
     color: #111;
@@ -427,8 +436,9 @@ button.ghost {
 }
 
 .figure dt {
-    font-size: 0.65rem;
-    letter-spacing: 0.12em;
+    font-size: 0.68rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
     text-transform: uppercase;
     color: #858585;
 }
@@ -447,10 +457,11 @@ button.ghost {
 }
 
 .relay-chip {
-    font-size: 0.68rem;
+    font-size: 0.72rem;
+    font-weight: 500;
     border: 1px solid var(--color-border);
     border-radius: 999px;
-    padding: 0.1rem 0.5rem;
+    padding: 0.12rem 0.5rem;
     color: #9a9a9a;
 }
 
@@ -484,7 +495,8 @@ button.ghost {
 
 .rsvp-meta {
     margin-left: auto;
-    font-size: 0.7rem;
+    font-size: 0.75rem;
+    font-weight: 500;
     color: #9a9a9a;
     white-space: nowrap;
 }
@@ -536,7 +548,7 @@ button.ghost {
 @media (max-width: 40rem) {
     .npub-row .npub,
     .npub {
-        font-size: 0.68rem;
+        font-size: 0.8rem;
     }
 }
 
@@ -687,8 +699,9 @@ body.onepage .card {
 
 .mine-badge {
     display: inline-block;
-    font-size: 0.7rem;
-    letter-spacing: 0.14em;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
     text-transform: uppercase;
     color: #121212;
     background: var(--nhd-orange);
@@ -697,8 +710,8 @@ body.onepage .card {
 }
 
 .mine-lead {
-    font-size: 0.9rem;
-    line-height: 1.5;
+    font-size: 0.95rem;
+    line-height: 1.6;
 }
 
 /* ── live fingerprint grid (ported from asymmetric-vanity-npubs demo) ──── */
@@ -713,8 +726,9 @@ body.onepage .card {
     flex-wrap: wrap;
     gap: var(--spacing-sm);
     align-items: baseline;
-    font-size: 0.7rem;
-    letter-spacing: 0.06em;
+    font-size: 0.78rem;
+    font-weight: 500;
+    letter-spacing: 0.04em;
 }
 
 .grind-grid-caption {
