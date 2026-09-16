@@ -13,7 +13,7 @@ One nostr event, kind **1337** (regular, not replaceable), tagged for this hackd
   "kind": 1337,
   "tags": [
     ["t", "nostrhackday"],
-    ["nhr", "2026-09-30-berlin"],
+    ["nhr", "2026-09-29-berlin"],
     ["status", "accepted"],
     ["client", "nostrhackday-signup"],
     ["nonce", "<counter>", "<declared bit difficulty>"]

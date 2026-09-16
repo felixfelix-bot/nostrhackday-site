@@ -55,7 +55,7 @@ export const BECH32_CHARSET = 'qpzry9x8gf2tvdw0s3jn54khce6mua7l';
 export const DEFAULT_PARAMS = Object.freeze({
   kind: RSVP_KIND,
   tagName: 'nhr',
-  eventTag: '2026-09-30-berlin',
+  eventTag: '2026-09-29-berlin',
   hashtag: 'nostrhackday',
   base: 16,
   cap: 22,

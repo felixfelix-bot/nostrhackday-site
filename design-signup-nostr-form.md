@@ -3,7 +3,7 @@
 **Project:** nostrhackday landing page (`/home/c03rad0r/repos/nostrhackday-site`)
 **Goal:** Replace the footer "SIGN UP" button (currently → `https://c-base.org/`) with a
 proper signup form that is itself a custom **Nostr client** submitting a **custom event kind**.
-**Audience:** "Let's Build on Nostr" hackday at c-base, Berlin, Wed 2026-09-30. Attendees are
+**Audience:** "Let's Build on Nostr" hackday at c-base, Berlin, Tue 2026-09-29 (date moved from Wed 2026-09-30 at the operator's request, 2026-09-16). Attendees are
 developers — many will have a Nostr key, many will not (some will get their first key *at* the event).
 
 Deployment targets (both must work): **GitHub Pages** + **nsyte/nsite** single static dir.
@@ -37,7 +37,7 @@ Deployment targets (both must work): **GitHub Pages** + **nsyte/nsite** single s
   "kind": 1337,
   "tags": [
     ["t", "nostrhackday"],
-    ["nhr", "2026-09-30-berlin"],
+    ["nhr", "2026-09-29-berlin"],
     ["status", "accepted"]
   ],
   "content": "{ \"name\":\"Ada\", \"alias\":\"@ada_hacks\", \"npub\":\"npub1...\", \"contact\":{\"telegram\":\"@ada\", \"matrix\":\"@ada:matrix.org\", \"email\":\"ada@example.com\"}, \"diet\":\"vegetarian\", \"idea\":\"building a cashu app\", \"intent\":\"attending\" }",
@@ -47,7 +47,7 @@ Deployment targets (both must work): **GitHub Pages** + **nsyte/nsite** single s
 
 **Tag contract (keep minimal, always present):**
 - `["t","nostrhackday"]` — NIP-32 hashtag, makes signups queryable by any client/indexer.
-- `["nhr","2026-09-30-berlin"]` — stable per-event marker tag; this is what the org's collection
+- `["nhr","2026-09-29-berlin"]` — stable per-event marker tag; this is what the org's collection
   query filters on (`#nhr`), so future/other hackdays don't collide.
 - `["status","accepted"|"tentative"|"interested"]` — mirrors NIP-52 RSVP vocabulary.
 
@@ -126,7 +126,7 @@ via `nak event` to each relay and confirm acceptance + retention (see §Build Pl
   already in `.nsite/config.json`, so the org already operates nostr infra. Publishing to it gives
   a canonical, org-controlled copy.
 - A short fetch script (run on demand / nightly before the event, using `nak req`) queries
-  `kinds:[1337] #nhr:["2026-09-30-berlin"]` against the org relay + public relays, dedupes by
+  `kinds:[1337] #nhr:["2026-09-29-berlin"]` against the org relay + public relays, dedupes by
   pubkey, and dumps a plain list (name / alias / intent / contact). Optionally mirror to a sheet.
 This is pure-client for the visitor (no backend they depend on) with reliable org accounting.
 
