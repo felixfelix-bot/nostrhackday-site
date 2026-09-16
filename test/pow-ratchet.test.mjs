@@ -22,15 +22,19 @@ import {
   buildEventTemplate,
   buildTags,
   computeEventId,
+  deriveCandidate,
   difficultyOf,
+  expectedUnique,
   ladderCapacity,
   ladderTable,
   leadingZeroBits,
+  lowEntropyLabel,
   mineNonce,
   mineVanityKey,
   randomSeed,
   requiredBits,
   resolve,
+  scanLowEntropyWindows,
   signWithSecretKey,
   summarize,
   vanityBits,
@@ -38,7 +42,7 @@ import {
   vanityInfo,
   verifyRsvp,
 } from '../js/pow-ratchet.js';
-import { getEventHash, verifyEvent } from '../vendor/esm/nostr-tools@2.23.3/es2022/pure.bundle.mjs';
+import { getEventHash, getPublicKey, verifyEvent } from '../vendor/esm/nostr-tools@2.23.3/es2022/pure.bundle.mjs';
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -169,7 +173,199 @@ test('vanity: a key that does not match the target scores 0 bits, bit count is e
   assert.equal(leadingZeroBits('0'.repeat(64)), 256);
 });
 
-// ── 3. verification of a real, mined, signed RSVP ───────────────────────────
+// ── 2b. raindrop: the low-entropy window floor ───────────────────────────────
+
+/** Independent (test-local) window scanner — deliberately NOT the module's code. */
+function independentBestWindow(body, windowSize = 9) {
+  let best = null;
+  for (let i = 0; i + windowSize <= body.length; i += 1) {
+    const chars = body.slice(i, i + windowSize);
+    const unique = new Set(chars).size;
+    if (best === null || unique < best.unique) best = { start: i, chars, unique };
+  }
+  return best;
+}
+
+/** Sign an RSVP for a FIXED pubkey (used to construct sub-floor / flat-npub cases). */
+async function makeRsvpForPubkey(pubkey, secretKey, { params = SMALL, nonceBits = 0, createdAt = 1234, name = 'flat' } = {}) {
+  const template = buildEventTemplate({
+    pubkey,
+    content: JSON.stringify({ name, intent: 'build' }),
+    params,
+    createdAt,
+    tags: buildTags({ params }),
+  });
+  const top = await mineNonce({ template, targetBits: nonceBits, batch: 64 });
+  const event = signWithSecretKey({ ...template, tags: top.tags }, secretKey);
+  return { event, top, template };
+}
+
+/**
+ * Deterministically find a secret key whose npub (a) clears the visible leet
+ * floor and (b) contains NO low-entropy window. Fixed seed + fixed iteration
+ * order => fully reproducible, no luck involved (~1/500 candidates qualify).
+ */
+function findFlatNpubKey(params, seedByte = 0x11) {
+  const seed = new Uint8Array(32).fill(seedByte);
+  for (let counter = 0; counter < 200000; counter += 1) {
+    const secretKey = deriveCandidate(seed, 0, counter);
+    const pubkey = getPublicKey(secretKey);
+    const info = vanityInfo(pubkey, params);
+    if (info.chars < params.vanityChars) continue;
+    const scan = scanLowEntropyWindows(info.npub, params);
+    if (!scan.found) return { secretKey, pubkey, info, scan, counter, seed };
+  }
+  throw new Error('no flat npub found deterministically');
+}
+
+test('raindrop: scanLowEntropyWindows finds the exact window (start/chars/unique) and tie-breaks on the earliest start', () => {
+  // 10 distinct chars, then an 11-char run of one character, then more noise.
+  const body = '7k3q9x8g2m' + 'ppppppppppp' + 'u5r0s3jn54khce6mua7l';
+  const npub = 'npub1' + body;
+
+  const scan = scanLowEntropyWindows(npub);
+  assert.equal(scan.found, true);
+  assert.equal(scan.start, 10, 'start is relative to the bech32 data part (after npub1)');
+  assert.equal(scan.chars, 'ppppppppp');
+  assert.equal(scan.unique, 1);
+  assert.equal(scan.body, body, 'everything after npub1 is scanned');
+  assert.equal(scan.windows.length, body.length - 9 + 1, 'one OVERLAPPING window per start');
+  assert.equal(scan.windowSize, 9);
+  assert.equal(scan.maxUnique, 6);
+
+  // the expected unique count is the occupancy expectation for that window size
+  assert.ok(Math.abs(scan.expected - 32 * (1 - (31 / 32) ** 9)) < 1e-12);
+  assert.ok(scan.expected > 7.9 && scan.expected < 8, `E[unique] for W=9 is 7.953, got ${scan.expected}`);
+  assert.equal(scan.expected, expectedUnique(9));
+  assert.equal(scan.expected, expectedUnique(DEFAULT_PARAMS.windowSize));
+  // rarity = expected − actual, and it is reported on both the scan and the window
+  assert.ok(Math.abs(scan.rarity - (scan.expected - 1)) < 1e-12);
+  assert.equal(scan.rarity.toFixed(1), '7.0');
+  assert.deepEqual(scan.windows[10], { start: 10, chars: 'ppppppppp', unique: 1, rarity: scan.rarity });
+  assert.equal(lowEntropyLabel(scan), `1 unique in 9 · rarity ${scan.rarity.toFixed(1)}`);
+
+  // tie-break: starts 11 and 12 are ALSO all-'p' (unique 1)…
+  assert.equal(scan.windows[11].unique, 1);
+  assert.equal(scan.windows[12].unique, 1);
+  assert.equal(scan.windows[9].unique, 2, 'the window just before the run is not the winner');
+  assert.equal(scan.windows[13].unique, 2, 'a window straddling the end of the run is not the winner');
+  assert.equal(scan.windows[21].unique, 8, 'a window entirely in the noisy tail is near-pure noise (the "5" repeats)');
+  assert.equal(scan.windows.length, body.length - 9 + 1);
+  assert.equal(scan.windows.length, 33);
+
+  // the shipped floor keeps exactly 9/6 and 3 vanity chars (nothing was raised)
+  assert.equal(DEFAULT_PARAMS.windowSize, 9);
+  assert.equal(DEFAULT_PARAMS.maxUnique, 6);
+  assert.equal(DEFAULT_PARAMS.vanityChars, 3);
+});
+
+test('raindrop: no window under the threshold reports found:false', () => {
+  // the bech32 alphabet has 32 DISTINCT characters, so every 9-char window is 9-unique
+  assert.equal(new Set(BECH32_CHARSET).size, 32, 'alphabet sanity: all characters distinct');
+  const npub = 'npub1' + BECH32_CHARSET;
+
+  const scan = scanLowEntropyWindows(npub);
+  assert.equal(scan.found, false);
+  assert.equal(scan.unique, 9, 'the best available window still has 9 unique characters');
+  assert.equal(scan.windows.length, BECH32_CHARSET.length - 9 + 1);
+  assert.ok(scan.windows.every((w) => w.unique > DEFAULT_PARAMS.maxUnique), 'every window exceeds maxUnique');
+  assert.ok(scan.rarity < 0, 'rarity is negative here: more unique than a random window');
+  assert.equal(independentBestWindow(BECH32_CHARSET).unique, scan.unique, 'agrees with an independent scan');
+
+  // the threshold is the only gate: lower it to 9 and the same body qualifies
+  assert.equal(scanLowEntropyWindows(npub, { maxUnique: 9 }).found, true);
+  // ...and window size is a knob, not a hardcode
+  assert.equal(scanLowEntropyWindows(npub, { windowSize: 4, maxUnique: 3 }).found, false);
+
+  // a body shorter than one window has no windows at all
+  const tiny = scanLowEntropyWindows('npub1qpzry9x8');
+  assert.equal(tiny.found, false);
+  assert.equal(tiny.windows.length, 0);
+  assert.equal(tiny.start, -1);
+  assert.equal(tiny.unique, null);
+  assert.equal(tiny.rarity, 0);
+  assert.equal(lowEntropyLabel(tiny), 'no window');
+});
+
+test('raindrop: verifyRsvp rejects a correctly signed event whose npub has no low-entropy window', async () => {
+  const flat = findFlatNpubKey(SMALL);
+  assert.ok(flat.info.chars >= SMALL.vanityChars, 'the constructed key clears the visible leet floor');
+  assert.equal(flat.scan.body, flat.info.npub.slice(5), 'the scan body is the bech32 data part');
+  assert.equal(flat.scan.found, false, 'and has no window within the threshold');
+
+  const { event } = await makeRsvpForPubkey(flat.pubkey, flat.secretKey, { nonceBits: 0 });
+  assert.equal(verifyEvent(event), true, 'the signature is genuinely valid');
+  assert.equal(computeEventId(event), event.id, 'id is NIP-01 correct');
+
+  const v = verifyRsvp(event, SMALL);
+  assert.equal(v.ok, false);
+  assert.equal(v.reason, REASONS.LOW_ENTROPY_MISSING);
+  assert.equal(v.npub, flat.info.npub);
+  assert.equal(v.windowSize, 9);
+  assert.equal(v.maxUnique, 6);
+  assert.equal(v.bestUnique, flat.scan.unique);
+  assert.ok(v.bestUnique > 6, 'the best window still has too many unique characters');
+  // the reason TEXT names the criterion, not just a code
+  assert.match(v.text, /no 9-character window with <= 6 unique characters/);
+  assert.match(v.text, new RegExp(`lowest unique found: ${flat.scan.unique}`));
+  assert.match(v.criterion, /9-character window with <= 6 unique characters/);
+  assert.equal(v.lowEntropy.found, false);
+
+  // EVERYTHING ELSE about this event is fine: loosen only the window rule and it verifies
+  const loose = verifyRsvp(event, { ...SMALL, maxUnique: 9 });
+  assert.equal(loose.ok, true, loose.reason);
+  assert.equal(loose.vanityChars, SMALL.vanityChars, 'prefix floor passed');
+  assert.equal(loose.vanityBits, SMALL.vanityChars * 5);
+  assert.equal(loose.lowEntropyUnique, flat.scan.unique);
+
+  // the SET rule must not seat it either
+  const r = resolve([event], SMALL);
+  assert.equal(r.accepted.length, 0);
+  assert.equal(r.rejected[0].reason, REASONS.LOW_ENTROPY_MISSING);
+
+  // and the miner refuses to hand such a key out in the first place: fixed seeds
+  // make this reproducible, and the accepted key ALWAYS clears both floors
+  for (let w = 0; w < 3; w += 1) {
+    const mined = await mineVanityKey({ seed: flat.seed, workerIndex: w, params: SMALL, batch: 64 });
+    assert.equal(mined.scan.found, true, 'the miner always returns a key that clears the window floor');
+    assert.ok(mined.scan.unique <= SMALL.maxUnique);
+    assert.equal(mined.scan.body, mined.npub.slice(5));
+    assert.ok(mined.vanityChars >= SMALL.vanityChars, 'and the visible prefix floor');
+  }
+});
+
+test('raindrop: a real mined event is accepted and its window agrees with an independent re-scan', async () => {
+  const { event, mined } = await makeRsvp({ nonceBits: 2 });
+
+  // the miner hands the scan back, so callers never have to re-scan
+  assert.ok(mined.scan, 'mineVanityKey returns the scan for the minted npub');
+  assert.equal(mined.scan.found, true);
+  assert.equal(mined.scan.body, mined.npub.slice(5));
+  assert.equal(mined.scan.chars, mined.npub.slice(5).slice(mined.scan.start, mined.scan.start + 9));
+  assert.ok(mined.scan.unique <= SMALL.maxUnique);
+
+  const v = verifyRsvp(event, SMALL);
+  assert.equal(v.ok, true, v.reason);
+  assert.equal(v.lowEntropyUnique, mined.scan.unique);
+  assert.equal(v.lowEntropyStart, mined.scan.start);
+  assert.equal(v.lowEntropyRarity, mined.scan.rarity);
+  assert.deepEqual(
+    { found: v.lowEntropy.found, start: v.lowEntropy.start, unique: v.lowEntropy.unique, chars: v.lowEntropy.chars },
+    { found: true, start: mined.scan.start, unique: mined.scan.unique, chars: mined.scan.chars },
+    'verifyRsvp re-derives the same window the miner reported',
+  );
+
+  // INDEPENDENT re-scan: hand-rolled in this file, no module code involved
+  const best = independentBestWindow(mined.npub.slice(5), DEFAULT_PARAMS.windowSize);
+  assert.ok(best, 'the npub body is longer than one window');
+  assert.equal(best.unique, mined.scan.unique, 'independent scan agrees on unique');
+  assert.equal(best.start, mined.scan.start, 'independent scan agrees on start');
+  assert.equal(best.chars, mined.scan.chars, 'independent scan agrees on the characters');
+  assert.equal(best.unique, v.lowEntropyUnique);
+  assert.equal(best.start, v.lowEntropyStart);
+  assert.match(summarize(v), /raindrop=\d+\/9u/);
+});
+
 
 test('verify: a real mined + signed RSVP verifies, id and signature are recomputed locally', async () => {
   const { event, mined, top } = await makeRsvp({ nonceBits: 3 });

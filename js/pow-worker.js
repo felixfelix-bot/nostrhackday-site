@@ -32,6 +32,7 @@ import {
   mineNonce,
   mineVanityKey,
   randomSeed,
+  scanLowEntropyWindows,
   secretKeyToNsec,
   signWithSecretKey,
   vanityInfo,
@@ -81,6 +82,8 @@ function postMined(signer = state.signer) {
     npub: key.npub,
     vanityChars: key.vanityChars,
     vanityBits: key.vanityBits,
+    // the raindrop: scan returned with the key so the UI never re-scans
+    scan: key.scan ?? scanLowEntropyWindows(key.npub, state.params),
     nonce: top.nonce,
     declaredBits: top.declaredBits,
     actualBits: top.actualBits,

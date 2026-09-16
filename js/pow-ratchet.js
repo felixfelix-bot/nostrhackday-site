@@ -14,11 +14,17 @@
  * Identity: primary = ephemeral key generated client-side and discarded; upgrade
  * = NIP-07 extension. No backend, no server fallback, no build step.
  *
- * Proof of work is TWO things, both carried by the event:
+ * Proof of work is THREE things, all carried by the event:
  *   1. VISIBLE vanity npub prefix — leet of "nostrhackday", 3 characters at the
  *      floor (n/0/5 → 32^3 = 32 768 keypair generations ≈ 15 bits).
- *   2. An exact-rung NIP-13 nonce top-up so total difficulty can hit any bit.
+ *   2. VISIBLE low-entropy "raindrop" window — the npub must contain 9
+ *      consecutive characters with at most 6 distinct characters. This is the
+ *      cheat-resistant stand-in for the rest of the target word ("hackday"),
+ *      which could never be mined as an exact 7-character match. ~94% of npubs
+ *      already have such a window, so it is a floor everyone pays for free.
+ *   3. An exact-rung NIP-13 nonce top-up so total difficulty can hit any bit.
  *      difficulty = 5 * vanity_chars + declared_nonce_bits
+ *      (the raindrop window adds NO bits — it is a pass/fail visible property)
  *
  * Ladder / SET rule (order-independent, idempotent, grief-proof):
  *   sort candidates by difficulty DESC (tiebreak created_at ASC, then id ASC),
@@ -48,7 +54,9 @@ export const BECH32_CHARSET = 'qpzry9x8gf2tvdw0s3jn54khce6mua7l';
 /**
  * Locked ratchet parameters.
  *
- * base 16 bits = 3 leet chars = 32^3 tries  (~60 s single-thread, ~18 s on 4 workers)
+ * base 16 bits = 3 leet chars = 32^3 tries (~35-55 s single-thread at the
+ *   ~850-1300 keys/s measured on the hackday laptop, ~10-20 s on 4 workers),
+ *   times the 1.44x the raindrop window adds (see below)
  * cap  22 bits = the highest rung; the ladder then admits no further unvetted RSVPs
  * step +1 bit (2×) per `seatsPerStep` (2) accepted unvetted RSVPs
  */
@@ -66,6 +74,29 @@ export const DEFAULT_PARAMS = Object.freeze({
   vanityTarget: 'n05trh4ckd4y',
   /** visible floor: how many of those characters must match (3 → 15 bits → 32^3 tries). */
   vanityChars: 3,
+
+  /**
+   * "Raindrop" floor — the second, cheap-to-check visible property.
+   *
+   * The rest of the target word ("hackday") can never be mined as an exact
+   * 7-character match (32^7 ≈ 3.4e10). It is represented instead by LOW ENTROPY:
+   * a window of `windowSize` characters containing at most `maxUnique` distinct
+   * characters is visibly patterned, not noise. W=9 over the 32-char bech32
+   * alphabet gives E[unique] = 7.953 (see `expectedUnique`).
+   *
+   * Measured (scripts in the PR body / `node --test`), not assumed:
+   *   P(one given 9-window has ≤6 unique)          = 0.054
+   *   mean qualifying windows per 58-char body     = 2.72
+   *   P(an ~58-char npub body has at least one)    = 0.695   (Monte-Carlo, 100k bodies)
+   *
+   * The windows OVERLAP, so their hits are correlated and cannot be treated as
+   * 50 independent 0.054 shots (that would give 0.938 and a 1.07x cost — wrong).
+   * The honest cost of the floor is 1/0.695 ≈ 1.44x, i.e. ~47k tries instead of
+   * 32 768 — STILL CHEAP: everyone can mine it on the day. ≤5 unique would cost
+   * far more (measured P ≈ 0.005 per window), so the floor is 6.
+   */
+  windowSize: 9,
+  maxUnique: 6,
 
   /** pubkeys exempt from the ladder (org allowlist). They still pay the floor. */
   vettedPubkeys: [],
@@ -100,6 +131,7 @@ export const REASONS = Object.freeze({
   BAD_NONCE_TAG: 'bad-nonce-tag',
   DECLARED_BITS_EXCEEDS_ACTUAL: 'declared-bits-exceeds-actual',
   VANITY_FLOOR: 'vanity-floor',
+  LOW_ENTROPY_MISSING: 'low-entropy-missing',
   DUPLICATE_PUBKEY: 'duplicate-pubkey',
   LADDER_FULL: 'ladder-full',
   INSUFFICIENT_DIFFICULTY: 'insufficient-difficulty',
@@ -176,6 +208,85 @@ export function vanityInfo(pubkey, params = DEFAULT_PARAMS) {
 /** Bit difficulty of a pubkey's visible vanity prefix. */
 export function vanityBits(pubkey, params = DEFAULT_PARAMS) {
   return vanityInfo(pubkey, params).bits;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// "Raindrop" — the low-entropy window floor
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Expected number of DISTINCT characters in a window of `windowSize` drawn
+ * uniformly from an alphabet of `alphabetSize` (occupancy problem): each
+ * character of the alphabet is absent with probability ((A-1)/A)^W, so
+ * E[unique] = A * (1 − ((A−1)/A)^W). Bech32 has A = 32, so W=9 → 7.953.
+ */
+export function expectedUnique(windowSize, alphabetSize = BECH32_CHARSET.length) {
+  const size = Math.max(1, Math.floor(windowSize));
+  return alphabetSize * (1 - Math.pow((alphabetSize - 1) / alphabetSize, size));
+}
+
+/**
+ * Scan the bech32 DATA part of an npub (everything after `npub1`) for the
+ * lowest-entropy OVERLAPPING window of `windowSize` characters.
+ *
+ * A window with few distinct characters repeats itself visibly — the npub shows
+ * a "raindrop" of repeated colours instead of flat noise. That is the cheap,
+ * eyeball-checkable stand-in for the part of the target word that cannot be
+ * mined as an exact match.
+ *
+ * @returns {{found:boolean, start:number, chars:string, unique:number|null,
+ *            expected:number, rarity:number, windowSize:number, maxUnique:number,
+ *            windows:Array<{start:number,chars:string,unique:number,rarity:number}>, body:string}}
+ *   `found` is true iff the best window has `unique <= maxUnique`. The best
+ *   window is the one with the lowest `unique`, tie-broken by the EARLIEST
+ *   `start`. When the body is shorter than one window, `windows` is empty,
+ *   `start` is -1 and `unique` is null.
+ */
+export function scanLowEntropyWindows(
+  npub,
+  { windowSize = DEFAULT_PARAMS.windowSize, maxUnique = DEFAULT_PARAMS.maxUnique } = {},
+) {
+  const size = Math.max(1, Math.floor(windowSize) || 1);
+  const body = typeof npub === 'string' ? (npub.startsWith('npub1') ? npub.slice(5) : npub) : '';
+  const expected = expectedUnique(size);
+  const windows = [];
+  let best = null;
+
+  for (let start = 0; start + size <= body.length; start += 1) {
+    const chars = body.slice(start, start + size);
+    const seen = new Set();
+    for (const c of chars) seen.add(c);
+    const unique = seen.size;
+    // strictly lower keeps the EARLIEST start among equally low-entropy windows
+    if (best === null || unique < best.unique) {
+      best = { start, chars, unique, rarity: expected - unique };
+    }
+    windows.push({ start, chars, unique, rarity: expected - unique });
+  }
+
+  return {
+    found: best !== null && best.unique <= maxUnique,
+    start: best ? best.start : -1,
+    chars: best ? best.chars : '',
+    unique: best ? best.unique : null,
+    expected,
+    rarity: best ? best.rarity : 0,
+    windowSize: size,
+    maxUnique,
+    windows,
+    body,
+  };
+}
+
+/** Short human label for a scan result, e.g. `6 unique in 9 · rarity 2.0`. */
+export function lowEntropyLabel(scan) {
+  if (!scan || scan.unique === null || scan.unique === undefined) return 'no window';
+  return `${scan.unique} unique in ${scan.windowSize} · rarity ${scan.rarity.toFixed(1)}`;
+}
+
+/** One-line description of the criterion itself (used in rejection messages). */
+export function lowEntropyCriterion(params = DEFAULT_PARAMS) {
+  return `an npub must contain a ${params.windowSize}-character window with <= ${params.maxUnique} unique characters`;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -332,6 +443,25 @@ export function verifyRsvp(event, params = DEFAULT_PARAMS) {
     });
   }
 
+  // 6. Low-entropy "raindrop" floor: the npub must contain at least one window
+  //    of `windowSize` characters with at most `maxUnique` distinct characters.
+  //    This is the visible stand-in for the unmineable half of the target word.
+  const scan = scanLowEntropyWindows(info.npub, params);
+  if (!scan.found) {
+    return fail(REASONS.LOW_ENTROPY_MISSING, {
+      npub: info.npub,
+      windowSize: scan.windowSize,
+      maxUnique: scan.maxUnique,
+      bestUnique: scan.unique,
+      bestStart: scan.start,
+      criterion: lowEntropyCriterion({ windowSize: scan.windowSize, maxUnique: scan.maxUnique }),
+      text:
+        `no ${scan.windowSize}-character window with <= ${scan.maxUnique} unique characters ` +
+        `(lowest unique found: ${scan.unique === null ? 'no window fits' : scan.unique})`,
+      lowEntropy: scan,
+    });
+  }
+
   return {
     ok: true,
     event,
@@ -346,6 +476,10 @@ export function verifyRsvp(event, params = DEFAULT_PARAMS) {
     actualNonceBits,
     bits: info.bits + nonce.declaredBits,
     vetted: isVetted(pubkey, params),
+    lowEntropy: scan,
+    lowEntropyUnique: scan.unique,
+    lowEntropyStart: scan.start,
+    lowEntropyRarity: scan.rarity,
   };
 }
 
@@ -492,11 +626,17 @@ export function randomSeed() {
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 /**
- * Grind for a keypair whose npub starts with `params.vanityChars` leet characters.
+ * Grind for a keypair that clears BOTH visible floors:
+ *   · npub starts with `params.vanityChars` leet characters, and
+ *   · the npub body contains a low-entropy window (`params.windowSize` chars
+ *     with at most `params.maxUnique` unique characters) — the "raindrop".
+ * The window check only runs on prefix hits (~1/32^vanityChars of candidates),
+ * and ~69.5% of those already have one (measured), so the extra floor costs
+ * ≈1.44x — the minted keys ALWAYS carry a raindrop, by construction.
  * Yields to the event loop between batches so a Worker stays responsive and can
  * be stopped/retargeted mid-grind.
  *
- * @returns {Promise<{secretKey: Uint8Array, pubkey: string, npub: string, vanityChars: number, vanityBits: number, tries: number, elapsedMs: number}>}
+ * @returns {Promise<{secretKey: Uint8Array, pubkey: string, npub: string, vanityChars: number, vanityBits: number, scan: object, tries: number, elapsedMs: number}>}
  */
 export async function mineVanityKey({
   seed = randomSeed(),
@@ -520,19 +660,28 @@ export async function mineVanityKey({
       const pubkey = getPublicKey(secretKey);
       const info = vanityInfo(pubkey, params);
       if (info.chars >= params.vanityChars) {
-        return {
-          secretKey,
-          pubkey,
-          npub: info.npub,
-          vanityChars: info.chars,
-          vanityBits: info.bits,
-          tries: counter - startCounter,
-          elapsedMs: Date.now() - startedAt,
-          seed,
-          workerIndex,
-          endCounter: counter,
-          samples: [...samples],
-        };
+        // prefix landed — now pay the cheap second floor. Scanning is 50 window
+        // tests and only ever runs on a prefix hit, so it never touches the
+        // hot loop's cost.
+        const scan = scanLowEntropyWindows(info.npub, params);
+        if (scan.found) {
+          return {
+            secretKey,
+            pubkey,
+            npub: info.npub,
+            vanityChars: info.chars,
+            vanityBits: info.bits,
+            /** the raindrop window of THIS npub — callers never need to re-scan */
+            scan,
+            lowEntropy: scan,
+            tries: counter - startCounter,
+            elapsedMs: Date.now() - startedAt,
+            seed,
+            workerIndex,
+            endCounter: counter,
+            samples: [...samples],
+          };
+        }
       }
       samples.push({ npub: info.npub, chars: info.chars });
       if (samples.length > 4) samples.shift();
@@ -693,5 +842,8 @@ export function safePubkey(event) {
 /** Everything the ratchet needs to know about one submission, for logging/UI. */
 export function summarize(verdict) {
   if (!verdict?.ok) return `rejected(${verdict?.reason ?? 'unknown'})`;
-  return `${verdict.npub.slice(0, 5 + verdict.vanityChars)}… chars=${verdict.vanityChars} nonce=${verdict.nonceBits}b/${verdict.actualNonceBits}b total=${verdict.bits}b${verdict.vetted ? ' vetted' : ''}`;
+  const drop = verdict.lowEntropyUnique === undefined || verdict.lowEntropyUnique === null
+    ? ''
+    : ` raindrop=${verdict.lowEntropyUnique}/${verdict.lowEntropy?.windowSize ?? '?'}u`;
+  return `${verdict.npub.slice(0, 5 + verdict.vanityChars)}… chars=${verdict.vanityChars} nonce=${verdict.nonceBits}b/${verdict.actualNonceBits}b total=${verdict.bits}b${drop}${verdict.vetted ? ' vetted' : ''}`;
 }
