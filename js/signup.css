@@ -539,3 +539,279 @@ button.ghost {
         font-size: 0.68rem;
     }
 }
+
+/* ── ONE PAGE: announcement hero + #signup + page footer ────────────────── */
+
+body.onepage {
+    display: block;
+    padding: var(--spacing-lg) var(--spacing-md);
+}
+
+body.onepage .card {
+    margin: 0 auto;
+}
+
+/* the CTA scrolls here; keep the mining panel out from under the viewport edge */
+#signup {
+    scroll-margin-top: var(--spacing-lg);
+}
+
+/* smooth scroll only when the visitor has not asked for less motion */
+@media (prefers-reduced-motion: no-preference) {
+    html {
+        scroll-behavior: smooth;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    html {
+        scroll-behavior: auto;
+    }
+}
+
+/* ── the inviting primary CTA ──────────────────────────────────────────── */
+
+.cta-mine {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    min-height: 3rem; /* ≥44px tap target */
+    min-width: 3rem;
+    padding: 0.9rem 1.75rem;
+    background: linear-gradient(135deg, #ffb347, var(--nhd-orange));
+    color: #121212;
+    border: 2px solid var(--nhd-orange);
+    border-radius: 0.5rem;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-size: 1.05rem;
+    font-weight: 800;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    text-decoration: none;
+    cursor: pointer;
+    animation: cta-glow 2.6s ease-in-out infinite;
+    transition: var(--transition-default);
+}
+
+.cta-mine .cta-arrow {
+    font-size: 1.2em;
+    line-height: 1;
+}
+
+.cta-mine:hover {
+    background: linear-gradient(135deg, #ffd08a, #ffa733);
+    transform: translateY(-2px) scale(1.02);
+    box-shadow: 0 0 1.5rem rgba(247, 147, 26, 0.85), 0 0 3rem rgba(247, 147, 26, 0.4);
+}
+
+.cta-mine:focus-visible {
+    outline: 3px solid #ffffff;
+    outline-offset: 3px;
+}
+
+@keyframes cta-glow {
+    0%, 100% { box-shadow: 0 0 0.4rem rgba(247, 147, 26, 0.55), 0 0 1rem rgba(247, 147, 26, 0.25); }
+    50% { box-shadow: 0 0 1rem rgba(247, 147, 26, 0.95), 0 0 2.2rem rgba(247, 147, 26, 0.45); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .cta-mine {
+        animation: none;
+        box-shadow: 0 0 0.75rem rgba(247, 147, 26, 0.5);
+    }
+    .cta-mine:hover {
+        transform: none;
+    }
+}
+
+/* ── page footer (after #signup) ───────────────────────────────────────── */
+
+.page-footer {
+    max-width: 60rem;
+    margin: var(--spacing-lg) auto 0;
+    padding: var(--spacing-lg) var(--spacing-md) var(--spacing-2xl);
+    border-top: 1px solid var(--color-border);
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--spacing-md);
+    align-items: center;
+    justify-content: space-between;
+}
+
+.page-footer-details {
+    display: grid;
+    gap: var(--spacing-xs);
+}
+
+.page-footer .footer-signup-link {
+    display: inline-flex;
+    align-items: center;
+    min-height: 2.75rem;
+    padding: 0.5rem 1.1rem;
+    border: 2px solid var(--color-primary);
+    border-radius: var(--border-radius-sm);
+    color: var(--color-primary);
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    text-decoration: none;
+    transition: var(--transition-default);
+}
+
+.page-footer .footer-signup-link:hover,
+.page-footer .footer-signup-link:focus-visible {
+    background-color: var(--color-primary);
+    color: var(--color-background-page);
+}
+
+.page-footer-note {
+    flex-basis: 100%;
+    color: #9a9a9a;
+}
+
+/* ── mining panel framing ──────────────────────────────────────────────── */
+
+.mine-panel {
+    border-color: var(--nhd-orange);
+    box-shadow: 0 0 1.5rem rgba(247, 147, 26, 0.12), var(--shadow-card);
+}
+
+.mine-title {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 1.1rem !important;
+    color: #ffb347 !important;
+}
+
+.mine-badge {
+    display: inline-block;
+    font-size: 0.7rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: #121212;
+    background: var(--nhd-orange);
+    border-radius: 999px;
+    padding: 0.15rem 0.6rem;
+}
+
+.mine-lead {
+    font-size: 0.9rem;
+    line-height: 1.5;
+}
+
+/* ── live fingerprint grid (ported from asymmetric-vanity-npubs demo) ──── */
+
+.grind-grid {
+    display: grid;
+    gap: var(--spacing-xs);
+}
+
+.grind-grid-label {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--spacing-sm);
+    align-items: baseline;
+    font-size: 0.7rem;
+    letter-spacing: 0.06em;
+}
+
+.grind-grid-caption {
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: #9a9a9a;
+}
+
+.grind-grid-candidate {
+    font-size: 0.75rem;
+    color: #b9b9b9;
+}
+
+.fingerprint-grid-host {
+    overflow-x: auto;
+}
+
+.fingerprint-grid {
+    display: inline-grid;
+    gap: 3px;
+    padding: 12px;
+    background: #111;
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    margin: 8px 0;
+}
+
+.fingerprint-grid .cell {
+    width: 40px;
+    height: 40px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--nhd-mono);
+    font-size: 16px;
+    font-weight: bold;
+    color: rgba(0, 0, 0, 0.7);
+    animation: cellAppear 0.4s ease-out both;
+    transition: background-color 0.15s linear, color 0.15s linear, box-shadow 0.15s linear;
+}
+
+.fingerprint-grid .cell:hover {
+    transform: scale(1.15);
+    z-index: 5;
+}
+
+.fingerprint-grid .cell-empty {
+    background: var(--color-border);
+    opacity: 0.3;
+}
+
+@keyframes cellAppear {
+    from { opacity: 0; transform: scale(0.3) rotate(-30deg); }
+    to   { opacity: 1; transform: scale(1) rotate(0); }
+}
+
+.fingerprint-grid-host-found .fingerprint-grid {
+    border-color: var(--nhd-green);
+    box-shadow: 0 0 1rem rgba(63, 185, 80, 0.35);
+}
+
+@media (max-width: 40rem) {
+    .fingerprint-grid .cell {
+        width: 30px;
+        height: 30px;
+        font-size: 13px;
+    }
+    .fingerprint-grid {
+        padding: 8px;
+    }
+}
+
+/* the mining counters are the headline numbers: make them loud */
+.grind-title {
+    font-weight: 800;
+    letter-spacing: 0.14em;
+    color: #ffb347;
+}
+
+.grind-stats .grind-stat dd {
+    font-size: 1.15rem;
+    font-weight: 700;
+}
+
+.legend-grid {
+    background: linear-gradient(90deg, hsl(30, 60%, 48%), hsl(200, 72%, 62%), hsl(120, 84%, 48%));
+    border: 1px solid var(--color-border);
+}
+
+/* ── reduced motion for the in-page animations ─────────────────────────── */
+
+@media (prefers-reduced-motion: reduce) {
+    .fingerprint-grid .cell,
+    .grind-dot,
+    .npub-row {
+        animation: none;
+    }
+}
+
