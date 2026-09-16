@@ -1,25 +1,42 @@
 # Nostrhackday
 
-```
-https://npub1dn676fsuf5399dqgedrxt2p3r9008j75lj4vuzh742zcw3e5070s99fclh.nsite.lol/
-```
+**Let's Build on Nostr** — Tue **29.09.2026**, 10:00–18:30, c-base, Rungestraße 20, 10179 Berlin.
+Two days before bitcoin++ Berlin (payments edition, 01.10.–03.10.2026) — https://btcpp.dev/
 
-This project is a simple, static website for announcing the Nostr Hack Day.
+## Live
 
-## Publishing as an Nsite
+- https://nostrhackday.orangesync.tech/
+- https://felixfelix-bot.github.io/nostrhackday-site/
+- https://npub15xyvqavhg8sw9f2uqnnxx5e7myl9d54lw697tp6aemf0n5p8sx0qmusn8g.nsite.lol/
 
-This site can be published as a decentralized website (`nsite`) using the `@nsyte/cli` tool.
+## RSVP = in-browser proof of work
 
-### Prerequisites
+One page, no server, no accounts, no email. The page mines a nostr keypair whose
+npub carries a **leet prefix** (3 chars, `n05…`) plus a **low-entropy "raindrop"
+window** (9 chars, ≤6 distinct) — both readable off the screen — then signs a
+kind-1337 event and publishes it to public relays. Accepted RSVPs raise the
+difficulty ladder.
 
-1.  **Install Deno:** If you don't have Deno installed, you can find instructions at [deno.land](https://deno.land/).
+The miner, the verifier, the org collection script and the tests all share one
+module: `js/pow-ratchet.js`.
 
-### Deployment
-
-To publish your site, run the following command:
+## Publishing as an nsite
 
 ```bash
-deno run -A jsr:@nsyte/cli upload ./
+export PATH="$HOME/.deno/bin:$HOME/.local/bin:$PATH"
+./deploy-nsite.sh
 ```
 
-The tool will guide you through an interactive setup process to configure your Nostr key and other settings. It will then upload your site's files to a decentralized network of content servers and publish the location of your site to the Nostr network.
+`nsyte deploy` reads `.nsite/config.json` and signs with the key at
+`~/.hermes/state/nostrhackday-nsec.key` (not in this repo).
+
+After any republish, restart the serving gateway — it caches manifests and will
+otherwise keep serving the previous copy:
+
+```bash
+ssh debian@23.182.128.51 'docker restart tollgate-nsite-gateway'
+```
+
+## GitHub Pages
+
+Push to `main`; the workflow in `.github/workflows/` builds and deploys.

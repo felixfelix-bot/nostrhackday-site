@@ -1,0 +1,13 @@
+.git
+.github
+.DS_Store
+README.md
+TODO.md
+design.md
+notes/
+print/
+*.log
+.worktrees/
+.nsite/
+deploy-nsite.sh
+*.backup

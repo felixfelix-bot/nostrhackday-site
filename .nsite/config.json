@@ -1,27 +1,24 @@
 {
+  "$schema": "https://nsyte.run/schemas/config.schema.json",
+  "title": "Nostrhackday",
+  "description": "Let's Build on Nostr — Tue 29.09.2026, c-base Berlin. RSVP by mining a proof-of-work npub in your browser.",
+  "source": "https://github.com/felixfelix-bot/nostrhackday-site",
   "relays": [
-    "wss://relay.nostr.band",
-    "wss://nos.lol",
     "wss://relay.damus.io",
     "wss://relay.primal.net",
-    "wss://relay.nsite.lol",
-    "wss://nostrue.com"
+    "wss://nos.lol",
+    "wss://relay.ngit.dev",
+    "wss://relay.orangesync.tech"
   ],
   "servers": [
-    "https://cdn.hzrd149.com/",
-    "https://cdn.sovbit.host/",
-    "https://nosto.re/",
-    "https://blossom.band/",
-    "https://en.nostrmedia.com/",
-    "https://blossom.azzamo.net/",
-    "https://blossom.primal.net/"
+    "https://blossom2.orangesync.tech",
+    "https://blossom.primal.net",
+    "https://cdn.hzrd149.com",
+    "https://cdn.sovbit.host",
+    "https://cdn.nostrcheck.me"
   ],
-  "profile": {
-    "name": "nostrhackday",
-    "display_name": "Nostrhackday",
-    "about": "A hackday for building on Nostr."
-  },
-  "publishProfile": true,
-  "publishRelayList": true,
-  "publishServerList": true
+  "id": null,
+  "gatewayHostnames": [
+    "nsite.lol"
+  ]
 }
