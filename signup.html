@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NOSTR HACKDAY — RSVP (proof of work)</title>
+    <link rel="stylesheet" type="text/css" href="style.css">
+    <link rel="stylesheet" type="text/css" href="js/signup.css">
+    <link rel="icon" href="favicon.ico" type="image/x-icon">
+</head>
+<body>
+    <article class="card">
+        <header class="card-header">
+            <div class="header-ornament">▲▲▲</div>
+            <h1 class="header-title">RSVP</h1>
+            <div class="header-ornament">▲▲▲</div>
+        </header>
+    </article>
+
+    <main class="signup-body">
+        <!-- ── what this is ─────────────────────────────────────────────── -->
+        <section class="panel" id="intro">
+            <h2>Sign up with proof of work</h2>
+            <p>
+                No accounts, no emails, no server. Your RSVP is a
+                <strong>nostr event (kind 1337)</strong> signed by a key that is generated
+                here in your browser and <em>never leaves it</em>. To be counted it must carry
+                real, verifiable work: a <strong>leet npub prefix</strong> you can check with
+                your own eyes (<span class="npub"><span class="npub-vanity">n05</span></span>…)
+                plus a <strong>NIP-13 nonce</strong> that meets the current ladder rung.
+            </p>
+            <p class="muted small">
+                The counter below is live: it is an applesauce <code>EventStore</code> fed by public relays
+                and read through a reactive query, so accepted RSVPs and the current required difficulty
+                update as events land. Verification runs in your browser too — the event id is recomputed,
+                the signature is checked, and the leading zero bits are counted locally. The declared
+                nonce value is never trusted.
+            </p>
+            <ul class="ladder" id="ladder"></ul>
+            <p class="muted small" id="cap-note"></p>
+        </section>
+
+        <!-- ── the grinding ─────────────────────────────────────────────── -->
+        <section class="panel">
+            <h2>Proof of work</h2>
+            <div id="grind"></div>
+            <div class="mine-track" style="margin-top:0.75rem">
+                <div class="mine-bar" id="mine-bar"></div>
+            </div>
+            <p class="mine-label muted small" id="mine-label" style="margin-top:0.4rem">starting…</p>
+            <p class="status-line" id="status-line" data-state="idle">booting…</p>
+        </section>
+
+        <!-- ── the form ─────────────────────────────────────────────────── -->
+        <section class="panel">
+            <h2>Your RSVP</h2>
+            <form id="rsvp-form" novalidate>
+                <div class="form-grid">
+                    <div class="field">
+                        <label for="f-name">Name</label>
+                        <input id="f-name" name="name" autocomplete="name" required>
+                    </div>
+                    <div class="field">
+                        <label for="f-alias">Nostr handle / alias</label>
+                        <input id="f-alias" name="alias" placeholder="npub, nip-05, or handle">
+                    </div>
+                    <div class="field">
+                        <label for="f-intent">What do you want to do?</label>
+                        <select id="f-intent" name="intent" required>
+                            <option value="">choose…</option>
+                            <option value="build">build something</option>
+                            <option value="learn">learn nostr</option>
+                            <option value="hack">hack on a client / relay / library</option>
+                            <option value="present">demo / present</option>
+                            <option value="mentor">mentor / help others</option>
+                            <option value="hang">hang out and watch</option>
+                        </select>
+                    </div>
+                    <div class="field">
+                        <label for="f-skill">Skills you bring (optional)</label>
+                        <input id="f-skill" name="skill" placeholder="rust, js, design, hardware…">
+                    </div>
+                    <div class="field field-wide">
+                        <label for="f-idea">Idea you might bring (optional)</label>
+                        <textarea id="f-idea" name="idea" rows="3"></textarea>
+                    </div>
+                    <div class="field">
+                        <label for="f-diet">Food notes (optional)</label>
+                        <input id="f-diet" name="diet" placeholder="vegan, allergies…">
+                    </div>
+                    <div class="field">
+                        <label for="f-contact">Contact for the org team (optional)</label>
+                        <input id="f-contact" name="contact" placeholder="nostr, signal, matrix…">
+                    </div>
+                </div>
+
+                <div class="field hp-field" aria-hidden="true">
+                    <label for="hp-field">Leave this empty</label>
+                    <input id="hp-field" name="website" tabindex="-1" autocomplete="off">
+                </div>
+
+                <p class="checkbox-row" style="margin-top:1rem">
+                    <input type="checkbox" id="f-consent" name="consent">
+                    <label for="f-consent">
+                        I understand this RSVP is a public nostr event published to public relays: the
+                        fields above, my npub and the proof of work are all public. No email, no tracking,
+                        no backend — everything happens in this tab.
+                    </label>
+                </p>
+                <p class="checkbox-row">
+                    <input type="checkbox" id="nip07-toggle" name="nip07" hidden>
+                    <label for="nip07-toggle" id="nip07-label">Use my NIP-07 key</label>
+                </p>
+                <p class="muted small" id="nip07-note">checking for a NIP-07 extension…</p>
+
+                <div class="result-actions">
+                    <button type="submit" id="btn-submit">Submit RSVP</button>
+                    <button type="button" class="ghost" id="keep-key">Keep my key (export nsec)</button>
+                </div>
+            </form>
+        </section>
+
+        <!-- ── live counter ─────────────────────────────────────────────── -->
+        <section class="panel">
+            <h2>Live RSVP counter</h2>
+            <dl class="counter-figures">
+                <div class="figure"><dt>accepted</dt><dd id="counter-accepted">0</dd></div>
+                <div class="figure"><dt>events seen</dt><dd id="counter-total">0</dd></div>
+                <div class="figure"><dt>seats open</dt><dd id="counter-seats">?</dd></div>
+                <div class="figure"><dt>next RSVP needs</dt><dd id="counter-next">16 bits</dd></div>
+            </dl>
+            <p class="muted small" id="counter-floor"></p>
+            <div class="relay-chips" id="relay-chips"></div>
+            <ul class="rsvp-list" id="counter-list"></ul>
+            <p class="muted small">
+                rejected / illegible events: <span id="counter-rejected">0</span> —
+                events that fail id re-computation, signature checks, the vanity floor, the nonce claim
+                or the current rung do not count and never take a seat.
+            </p>
+        </section>
+
+        <!-- ── result ───────────────────────────────────────────────────── -->
+        <section class="panel" id="result" hidden>
+            <h2>Your RSVP</h2>
+            <div class="result-npub">
+                <div class="muted small">your npub (green = mined, orange = anti-phish zone)</div>
+                <div class="npub" id="result-npub"></div>
+            </div>
+            <p class="muted small">event id</p>
+            <p class="npub small" id="result-id"></p>
+            <p class="muted small" id="result-bits"></p>
+            <ul class="publish-log" id="publish-log"></ul>
+            <textarea class="nsec-out" id="nsec-out" rows="2" readonly hidden></textarea>
+            <p class="muted small">
+                Your key lives only in this tab. Export it if you want to keep the npub — the
+                proof of work belongs to that key, not to you, so a lost key means a lost RSVP.
+            </p>
+            <div class="result-actions">
+                <button type="button" class="ghost" id="download-key">Download key file</button>
+                <a class="muted small" href="index.html">← back to the hackday page</a>
+            </div>
+        </section>
+
+        <footer class="panel muted small">
+            In-browser only: no signup server, no cookies, no analytics. Assets are vendored locally
+            (see <code>vendor/VENDOR.md</code>); the verifier is <code>js/pow-ratchet.js</code>, shared
+            with the org collection script and the test suite.
+        </footer>
+    </main>
+
+    <script type="module" src="js/signup.js"></script>
+</body>
+</html>
