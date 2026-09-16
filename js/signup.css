@@ -168,7 +168,7 @@ a {
 }
 
 .grind-headline-label {
-    font-size: 0.75rem;
+    font-size: 0.8rem;
     font-weight: 600;
     letter-spacing: 0.05em;
     text-transform: uppercase;
@@ -183,7 +183,7 @@ a {
     display: flex;
     flex-wrap: wrap;
     gap: var(--spacing-md);
-    font-size: 0.75rem;
+    font-size: 0.8rem;
 }
 
 .grind-stat {
@@ -195,7 +195,7 @@ a {
     color: #858585;
     text-transform: uppercase;
     letter-spacing: 0.06em;
-    font-size: 0.68rem;
+    font-size: 0.8rem;
     font-weight: 600;
 }
 
@@ -238,7 +238,7 @@ a {
 }
 
 .grind-legend {
-    font-size: 0.75rem;
+    font-size: 0.8rem;
     font-weight: 500;
     color: #9a9a9a;
     display: flex;
@@ -320,7 +320,7 @@ a {
 }
 
 .ladder-rung {
-    font-size: 0.75rem;
+    font-size: 0.8rem;
     font-weight: 500;
     border: 1px solid var(--color-border);
     border-radius: var(--border-radius-sm);
@@ -436,7 +436,7 @@ button.ghost {
 }
 
 .figure dt {
-    font-size: 0.68rem;
+    font-size: 0.8rem;
     font-weight: 600;
     letter-spacing: 0.06em;
     text-transform: uppercase;
@@ -457,7 +457,7 @@ button.ghost {
 }
 
 .relay-chip {
-    font-size: 0.72rem;
+    font-size: 0.8rem;
     font-weight: 500;
     border: 1px solid var(--color-border);
     border-radius: 999px;
@@ -495,7 +495,7 @@ button.ghost {
 
 .rsvp-meta {
     margin-left: auto;
-    font-size: 0.75rem;
+    font-size: 0.8rem;
     font-weight: 500;
     color: #9a9a9a;
     white-space: nowrap;
@@ -507,7 +507,7 @@ button.ghost {
     padding: 0;
     display: grid;
     gap: 0.15rem;
-    font-size: 0.75rem;
+    font-size: 0.8rem;
     font-family: var(--nhd-mono);
 }
 
@@ -699,7 +699,7 @@ body.onepage .card {
 
 .mine-badge {
     display: inline-block;
-    font-size: 0.72rem;
+    font-size: 0.8rem;
     font-weight: 700;
     letter-spacing: 0.06em;
     text-transform: uppercase;
@@ -733,12 +733,12 @@ body.onepage .card {
 
 .grind-grid-caption {
     text-transform: uppercase;
-    letter-spacing: 0.14em;
+    letter-spacing: 0.05em;
     color: #9a9a9a;
 }
 
 .grind-grid-candidate {
-    font-size: 0.75rem;
+    font-size: 0.8rem;
     color: #b9b9b9;
 }
 
@@ -805,7 +805,7 @@ body.onepage .card {
 /* the mining counters are the headline numbers: make them loud */
 .grind-title {
     font-weight: 800;
-    letter-spacing: 0.14em;
+    letter-spacing: 0.05em;
     color: #ffb347;
 }
 
