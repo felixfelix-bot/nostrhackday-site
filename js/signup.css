@@ -106,6 +106,90 @@ a {
     color: #6e6e6e;
 }
 
+/* the raindrop: a 9-char window with ≤6 distinct characters, ringed in place */
+.npub-window {
+    display: inline;
+    border: 1px solid var(--nhd-green);
+    border-radius: 3px;
+    box-shadow: 0 0 6px rgba(63, 185, 80, 0.45), inset 0 0 4px rgba(63, 185, 80, 0.12);
+    padding: 0 0.1em;
+    position: relative;
+}
+
+/* inside the ring the zone borders would double up: keep colour, drop the lines */
+.npub-window .npub-window-part {
+    border-color: transparent;
+    box-shadow: none;
+}
+
+.npub-window .npub-window-part.npub-tail {
+    color: #9fe0a8;
+}
+
+/* ── the target word, mined/unmined progress ───────────────────────────── */
+
+.target-strip {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.5rem;
+    margin-bottom: var(--spacing-xs);
+}
+
+.target-strip-label {
+    color: #8a8a8a;
+    font-size: 0.75rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.target-word {
+    display: inline-flex;
+    gap: 2px;
+    font-family: var(--nhd-mono);
+    font-size: 1.1rem;
+    letter-spacing: 0.04em;
+}
+
+.target-char {
+    display: inline-block;
+    min-width: 0.85em;
+    text-align: center;
+    padding: 0.05em 0.1em;
+    border-radius: 3px;
+}
+
+.target-char-mined {
+    background: var(--nhd-green-dim);
+    border: 1px solid var(--nhd-green);
+    color: var(--nhd-green);
+    font-weight: 700;
+}
+
+.target-char-pending {
+    border: 1px dashed #4a4a4a;
+    color: #6b6b6b;
+}
+
+.target-count {
+    font-family: var(--nhd-mono);
+    font-size: 0.8rem;
+    color: #8a8a8a;
+}
+
+.raindrop-badge {
+    display: inline-block;
+    margin-left: 0.5rem;
+    padding: 0.1rem 0.5rem;
+    border: 1px solid var(--nhd-green);
+    border-radius: 999px;
+    background: var(--nhd-green-dim);
+    color: var(--nhd-green);
+    font-size: 0.75rem;
+    font-family: var(--nhd-mono);
+    white-space: nowrap;
+}
+
 /* ── the grinding visualisation ────────────────────────────────────────── */
 
 .grind-viz {
@@ -819,13 +903,63 @@ body.onepage .card {
     border: 1px solid var(--color-border);
 }
 
+.legend-window {
+    background: transparent;
+    border: 1px solid var(--nhd-green);
+    border-radius: 3px;
+    box-shadow: 0 0 6px rgba(63, 185, 80, 0.45);
+}
+
+/* ── the raindrop in the 2D grid: which cells are inside the window ────── */
+
+.fingerprint-grid .cell-in-window {
+    outline: 2px solid var(--nhd-green);
+    outline-offset: 1px;
+    z-index: 2;
+}
+
+/* mark the ring, not the cell colour: a dim non-matching cell must stay legible */
+.fingerprint-grid .cell-in-window::after {
+    content: attr(data-window-pos);
+    position: absolute;
+    top: -6px;
+    right: -6px;
+    font-size: 9px;
+    line-height: 1;
+    color: var(--nhd-green);
+    background: #111;
+    border-radius: 3px;
+    padding: 1px 2px;
+}
+
+.fingerprint-grid .cell {
+    position: relative;
+}
+
 /* ── reduced motion for the in-page animations ─────────────────────────── */
 
 @media (prefers-reduced-motion: reduce) {
     .fingerprint-grid .cell,
     .grind-dot,
-    .npub-row {
+    .npub-row,
+    .npub-window,
+    .target-char,
+    .raindrop-badge {
         animation: none;
+        transition: none;
     }
+}
+
+/* a soft breath on the raindrop ring, only when motion is welcome */
+@media (prefers-reduced-motion: no-preference) {
+    .npub-window,
+    .fingerprint-grid .cell-in-window {
+        animation: raindropPulse 2.6s ease-in-out infinite;
+    }
+}
+
+@keyframes raindropPulse {
+    0%, 100% { box-shadow: 0 0 6px rgba(63, 185, 80, 0.35); }
+    50%      { box-shadow: 0 0 12px rgba(63, 185, 80, 0.75); }
 }
 

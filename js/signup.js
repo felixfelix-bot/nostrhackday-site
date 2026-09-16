@@ -29,13 +29,15 @@ import {
   buildTags,
   describeRsvp,
   ladderTable,
+  lowEntropyLabel,
   requiredBits,
   resolve,
+  scanLowEntropyWindows,
   secretKeyToNsec,
   vanityInfo,
   verifyRsvp,
 } from './pow-ratchet.js';
-import { createGrindViz } from './viz.js';
+import { createGrindViz, renderNpub } from './viz.js';
 
 // ── configuration ────────────────────────────────────────────────────────────
 
@@ -155,7 +157,7 @@ function renderCounter(result, total) {
   $('counter-seats').textContent = String(result.seatsOpen);
   const next = result.nextRequiredBits;
   $('counter-next').textContent = next === null ? 'ladder full' : `${next} bits`;
-  $('counter-floor').textContent = `${PARAMS.vanityChars} leet chars + ${Math.max(0, (next ?? PARAMS.base) - PARAMS.vanityChars * 5)} nonce bits`;
+  $('counter-floor').textContent = `${PARAMS.vanityChars} leet chars + raindrop + ${Math.max(0, (next ?? PARAMS.base) - PARAMS.vanityChars * 5)} nonce bits`;
 
   const list = $('counter-list');
   list.replaceChildren(
@@ -165,8 +167,12 @@ function renderCounter(result, total) {
       const who = describeRsvp(entry.event);
       const npub = document.createElement('span');
       npub.className = 'rsvp-npub npub';
-      // green zone = mined leet prefix, orange = anti-phish zone
-      const parts = buildZoneSpans(entry.npub, entry.vanityChars);
+      // green zone = mined leet prefix, orange = anti-phish zone, ring = raindrop
+      const scan = entry.lowEntropy;
+      const win = scan?.found
+        ? { start: scan.start, length: scan.windowSize, label: lowEntropyLabel(scan) }
+        : null;
+      const parts = buildZoneSpans(entry.npub, entry.vanityChars, win);
       npub.append(...parts);
       const meta = document.createElement('span');
       meta.className = 'rsvp-meta';
@@ -178,7 +184,7 @@ function renderCounter(result, total) {
   $('counter-rejected').textContent = String(result.rejected.length);
 }
 
-function buildZoneSpans(npub, chars) {
+function buildZoneSpans(npub, chars, window = null) {
   const parts = [];
   const mk = (cls, text) => {
     const s = document.createElement('span');
@@ -188,9 +194,41 @@ function buildZoneSpans(npub, chars) {
   };
   const body = npub.startsWith('npub1') ? npub.slice(5) : npub;
   parts.push(mk('npub-prefix', 'npub1'));
-  parts.push(mk('npub-vanity', body.slice(0, chars)));
-  parts.push(mk('npub-antiphish', body.slice(chars, chars + 4)));
-  parts.push(mk('npub-tail', body.slice(chars + 4)));
+  // split the body at the raindrop window edges so the ring wraps exactly those
+  // characters (and stays one continuous outline when it straddles a zone)
+  const cuts = [0, chars, chars + 4, body.length];
+  if (window && Number.isFinite(window.start) && window.length > 0) {
+    cuts.push(
+      Math.max(0, Math.min(window.start, body.length)),
+      Math.max(0, Math.min(window.start + window.length, body.length)),
+    );
+  }
+  const points = [...new Set(cuts)].sort((a, b) => a - b);
+  let ring = null;
+  let ringTo = -1;
+  for (let i = 0; i < points.length - 1; i += 1) {
+    const s = points[i];
+    const e = points[i + 1];
+    if (e <= s) continue;
+    const inWindow = window && Number.isFinite(window.start) && s >= window.start && e <= window.start + window.length;
+    let cls = 'npub-tail';
+    if (e <= chars) cls = 'npub-vanity';
+    else if (s < chars) cls = 'npub-vanity';
+    else if (e <= chars + 4) cls = 'npub-antiphish';
+    else if (s < chars + 4) cls = 'npub-antiphish';
+    if (inWindow) {
+      if (!ring || s !== ringTo) {
+        ring = mk('npub-window', '');
+        parts.push(ring);
+      }
+      ring.appendChild(mk(`${cls} npub-window-part`, body.slice(s, e)));
+      ringTo = e;
+      if (window.label) ring.title = window.label;
+    } else {
+      parts.push(mk(cls, body.slice(s, e)));
+      ring = null;
+    }
+  }
   return parts;
 }
 
@@ -250,7 +288,7 @@ function startWorkers() {
             winner = worker;
             state.mined = msg;
             state.phase = 'ready';
-            viz.setFound({ npub: msg.npub, chars: msg.vanityChars, bits: msg.vanityBits });
+            viz.setFound({ npub: msg.npub, chars: msg.vanityChars, bits: msg.vanityBits, scan: msg.scan });
             viz.setState('key mined — submitting is instant', 'found');
             // the other workers are redundant now: the expensive half is done
             for (const w of workers) if (w !== worker) w.terminate();
@@ -397,7 +435,7 @@ async function submit() {
   setStatus('working', 'submitting proof of work…');
   const content = formContent();
 
-  if (state.useNip07 && state.nip07) {
+  if (state.useNip07 && state.nip07?.clears) {
     // Extension path: mine the nonce for THEIR pubkey, then let the extension
     // sign the identical template. Same mined id + tags, different signer.
     const mined = await mineForExtensionKey(content);
@@ -457,7 +495,22 @@ function finish() {
     }),
   );
   $('result').hidden = false;
-  $('result-npub').replaceChildren(...buildZoneSpans(state.mined.npub, state.mined.vanityChars));
+  // the raindrop window travels with the event, so show it here too
+  const scan = state.mined?.scan ?? scanLowEntropyWindows(state.mined.npub, PARAMS);
+  const win = scan?.found ? { start: scan.start, length: scan.windowSize, label: lowEntropyLabel(scan) } : null;
+  $('result-npub').replaceChildren(
+    ...renderNpub(state.mined.npub, {
+      chars: state.mined.vanityChars,
+      floor: state.mined.vanityChars,
+      antiPhish: 4,
+      window: win,
+    }).childNodes,
+  );
+  const badge = $('result-raindrop');
+  if (badge) {
+    badge.hidden = !win;
+    badge.textContent = win ? `raindrop · ${win.label}` : '';
+  }
   $('result-id').textContent = state.signed?.id ?? '';
   $('result-bits').textContent = `${state.mined.vanityBits} vanity + ${state.mined.declaredBits} nonce = ${state.mined.vanityBits + state.mined.declaredBits} bits (rung ${state.mined.targetBits})`;
   document.dispatchEvent(new CustomEvent('nhd:done', { detail: { event: state.signed, published: state.published } }));
@@ -487,19 +540,23 @@ async function detectNip07() {
   try {
     const pubkey = await window.nostr.getPublicKey();
     const info = vanityInfo(pubkey, PARAMS);
-    const clears = info.chars >= PARAMS.vanityChars;
-    state.nip07 = { pubkey, npub: info.npub, chars: info.chars, clears };
+    const scan = scanLowEntropyWindows(info.npub, PARAMS);
+    // both halves of the floor: the mined leet prefix AND the raindrop window
+    const clears = info.chars >= PARAMS.vanityChars && scan.found;
+    state.nip07 = { pubkey, npub: info.npub, chars: info.chars, clears, scan };
     const toggle = $('nip07-toggle');
     toggle.hidden = false;
     if (clears) {
-      $('nip07-label').textContent = `Use my NIP-07 key (${info.npub.slice(0, 5 + info.chars)}… clears the ${PARAMS.vanityChars}-char floor)`;
-      note.textContent = 'NIP-07 found: your extension key already clears the visible floor, so you can sign with it.';
+      $('nip07-label').textContent = `Use my NIP-07 key (${info.npub.slice(0, 5 + info.chars)}… clears the floor)`;
+      note.textContent = 'NIP-07 found: your extension key clears the visible floor and carries a raindrop, so you can sign with it.';
     } else {
       toggle.disabled = true;
       $('nip07-label').textContent = 'Use my NIP-07 key (unavailable)';
+      const missing = scan.found
+        ? `matches ${info.chars} of ${PARAMS.vanityChars} leet chars`
+        : `has no ${PARAMS.windowSize}-char window with ≤${PARAMS.maxUnique} distinct chars`;
       note.textContent =
-        `NIP-07 found, but its npub does not clear the visible ${PARAMS.vanityChars}-character floor ` +
-        `(it matches ${info.chars}) — the ladder floor is a verifiable property, so this RSVP would be ` +
+        `NIP-07 found, but its npub ${missing} — the floor is a verifiable property, so this RSVP would be ` +
         'rejected no matter who signs it. Your mined browser key will be used instead.';
     }
   } catch (e) {

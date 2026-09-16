@@ -91,9 +91,18 @@
                 can grab, and keeping the one whose <strong>npub spells the leet target</strong>. Every
                 matched character is 5 bits of real work: <strong>the mined prefix IS the
                 proof</strong>. The grid below shows the candidate being tried right now — one fixed
-                colour per character.
+                colour per character. The word's second half cannot be spelled at all, so instead your
+                npub must contain a <strong>raindrop</strong>: any 9-character window with at most 6
+                distinct characters.
             </p>
             <div id="grind">
+                <!-- target-word strip: the shell ships here so it is in the served HTML; the
+                     characters are always written from DEFAULT_PARAMS.vanityTarget in js/viz.js -->
+                <div class="target-strip" id="target-strip">
+                    <span class="target-strip-label">mining toward</span>
+                    <span class="target-word npub" id="target-word" role="img" aria-label="target word: 0 characters mined"></span>
+                    <span class="target-count" id="target-count">0/12</span>
+                </div>
                 <!-- filled by js/viz.js; shipped empty so the grid frame exists in the served HTML -->
                 <div class="fingerprint-grid-host" data-grid-chars="12">
                     <noscript><p class="muted small">The live fingerprint grid needs JavaScript.</p></noscript>
@@ -196,8 +205,9 @@
         <section class="panel" id="result" hidden>
             <h2>Your RSVP</h2>
             <div class="result-npub">
-                <div class="muted small">your npub (green = mined, orange = anti-phish zone)</div>
+                <div class="muted small">your npub (green = mined, orange = anti-phish zone, ring = raindrop window)</div>
                 <div class="npub" id="result-npub"></div>
+                <p class="muted small raindrop-badge" id="result-raindrop" hidden></p>
             </div>
             <p class="muted small">event id</p>
             <p class="npub small" id="result-id"></p>

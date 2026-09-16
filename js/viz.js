@@ -13,6 +13,13 @@
  *            5 bits of real, verifiable work (this is the part an attacker
  *            cannot fake for free)
  *
+ * Above the headline a STRIP shows the two visible halves of the open floor:
+ * the first `vanityChars` positions of the target word (mined as an exact
+ * leet prefix, solid green once matched) and the "hackday" tail represented by
+ * the RAINDROP — the low-entropy window (`DEFAULT_PARAMS.windowSize` characters
+ * with at most `DEFAULT_PARAMS.maxUnique` distinct ones), drawn ringed around
+ * the minted npub with a `6 unique in 9 · rarity 2.0` style badge.
+ *
  * The strip of candidate rows is fed real candidates from the mining worker, so
  * what the visitor sees scroll past is literally the search space being walked.
  *
@@ -23,6 +30,7 @@
  * viewer learns to read the pattern and can literally watch the search walk the
  * space — the mined prefix cells settle into one stable colour column by column.
  */
+import { DEFAULT_PARAMS, lowEntropyLabel } from './pow-ratchet.js';
 
 /** Zone layout: how many characters after the minted prefix get the orange box. */
 export const ANTI_PHISH_CHARS = 4;
@@ -96,10 +104,15 @@ function glowForChar(c, alpha) {
  *
  * @param {string|string[]} chars characters to show (e.g. the npub body)
  * @param {number} width how many characters the grid is sized for
+ * @param {{window?: {start: number, length: number}}} [opts]
+ *   a window (in `chars` coordinates) whose cells are ringed so the raindrop is
+ *   legible in the grid as well as in the npub text
  */
-export function renderFingerprintGrid(chars, width = GRID_CHARS) {
+export function renderFingerprintGrid(chars, width = GRID_CHARS, opts = {}) {
   const list = Array.from(chars ?? []);
-  const dim = Math.max(1, Math.ceil(Math.sqrt(width)));
+  const dim = Math.max(1, Math.ceil(Math.sqrt(Math.max(width, list.length))));
+  const ws = opts.window ? Math.max(0, opts.window.start) : -1;
+  const we = opts.window ? ws + Math.max(0, Math.floor(opts.window.length)) : -1;
   let html = `<div class="fingerprint-grid" style="grid-template-columns: repeat(${dim}, 1fr);">`;
   for (let i = 0; i < list.length; i += 1) {
     const c = list[i];
@@ -107,8 +120,11 @@ export function renderFingerprintGrid(chars, width = GRID_CHARS) {
     const glow = glowForChar(c, 0.33);
     const glowTight = glowForChar(c, 0.6);
     const delay = (i * 0.04).toFixed(2);
+    const inWindow = ws >= 0 && i >= ws && i < we;
     html +=
-      `<div class="cell" style="background:${color};color:${textColorForChar(c)};` +
+      `<div class="cell${inWindow ? ' cell-in-window' : ''}"` +
+      `${inWindow ? ` data-window-pos="${i - ws + 1}"` : ''}` +
+      ` style="background:${color};color:${textColorForChar(c)};` +
       `box-shadow:0 0 8px ${glow},0 0 3px ${glowTight};animation-delay:${delay}s;">${esc(c)}</div>`;
   }
   // pad to fill grid
@@ -124,6 +140,40 @@ export function renderFingerprintGrid(chars, width = GRID_CHARS) {
 function npubBody(npub) {
   if (typeof npub !== 'string') return '';
   return npub.startsWith('npub1') ? npub.slice(5) : npub;
+}
+
+/**
+ * The target word the floor is spelled from — ALWAYS the shipped value, so the
+ * strip cannot drift from what verifyRsvp actually enforces.
+ */
+export const TARGET_WORD = DEFAULT_PARAMS.vanityTarget;
+
+/**
+ * Render the FULL target word as a mined/unmined progress strip.
+ *
+ * `matched` leading characters are solid green (that many chars are now real,
+ * verifiable work), the not-yet-matched remainder is rendered muted && dashed.
+ * Content is set from DEFAULT_PARAMS.vanityTarget — never from page markup.
+ *
+ * @param {HTMLElement} host the `#target-word` span to fill
+ * @param {number} matched how many leading characters are already mined
+ * @param {string} [word=DEFAULT_PARAMS.vanityTarget]
+ * @returns {HTMLElement} the host, for chaining
+ */
+export function renderTargetStrip(host, matched = 0, word = TARGET_WORD) {
+  if (!host) return host;
+  const count = Math.max(0, Math.min(matched, word.length));
+  host.replaceChildren(
+    ...Array.from(word, (c, i) => {
+      const cls = i < count ? 'target-char target-char-mined' : 'target-char target-char-pending';
+      return el('span', cls, c);
+    }),
+  );
+  host.setAttribute('aria-label', `${count} of ${word.length} characters of "${word}" mined`);
+  const countNode = host.parentElement?.querySelector('.target-count');
+  if (countNode) countNode.textContent = `${count}/${word.length}`;
+  host.dataset.matched = String(count);
+  return host;
 }
 
 /**
@@ -146,15 +196,78 @@ export function npubParts(npub, { chars = 0, floor = 0, antiPhish = ANTI_PHISH_C
   };
 }
 
-/** Render one npub as zone spans (used for rows and for the headline npub). */
+/** Render one npub as zone spans (used for rows and for the headline npub).
+ *  Pass opts.window = { start, length, label } (body coordinates) to ring the
+ *  low-entropy raindrop window wherever it overlaps the shown characters. */
 export function renderNpub(npub, opts = {}, tagName = 'span') {
   const parts = npubParts(npub, opts);
+  const body = npubBody(npub);
   const host = el(tagName, 'npub');
   host.appendChild(el('span', 'npub-prefix', parts.prefix));
-  if (parts.vanity) host.appendChild(el('span', 'npub-vanity', parts.vanity));
-  if (parts.vanityPending) host.appendChild(el('span', 'npub-vanity-pending', parts.vanityPending));
-  if (parts.antiPhish) host.appendChild(el('span', 'npub-antiphish', parts.antiPhish));
-  if (parts.tail) host.appendChild(el('span', 'npub-tail', parts.tail));
+
+  const zones = [
+    { cls: 'npub-vanity', s: 0, e: parts.vanity.length },
+    { cls: 'npub-vanity-pending', s: parts.vanity.length, e: parts.vanity.length + parts.vanityPending.length },
+    {
+      cls: 'npub-antiphish',
+      s: parts.vanity.length + parts.vanityPending.length,
+      e: parts.vanity.length + parts.vanityPending.length + parts.antiPhish.length,
+    },
+    { cls: 'npub-tail', s: body.length - parts.tail.length, e: body.length },
+  ];
+
+  let ws = -1;
+  let we = -1;
+  const win = opts.window;
+  if (win && Number.isFinite(win.start) && win.length > 0) {
+    ws = Math.max(0, Math.min(win.start, body.length));
+    we = Math.min(body.length, ws + Math.max(0, Math.floor(win.length)));
+  }
+
+  const breakpoints = new Set([0, body.length]);
+  for (const z of zones) {
+    breakpoints.add(z.s);
+    breakpoints.add(z.e);
+  }
+  if (ws >= 0) {
+    breakpoints.add(ws);
+    breakpoints.add(we);
+  }
+  const points = [...breakpoints].sort((a, b) => a - b);
+  const segments = [];
+  for (let k = 0; k < points.length - 1; k += 1) {
+    const s = points[k];
+    const e = points[k + 1];
+    if (e <= s) continue;
+    const classes = [];
+    for (const z of zones) if (s >= z.s && e <= z.e) classes.push(z.cls);
+    const inWindow = ws >= 0 && s >= ws && e <= we;
+    if (!classes.length) continue;
+    segments.push({ text: body.slice(s, e), classes, inWindow });
+  }
+
+  // Consecutive window segments are wrapped in ONE `npub-window` element so the
+  // raindrop ring stays a single continuous outline even when the window
+  // straddles a zone boundary (vanity → orange → tail).
+  for (let i = 0; i < segments.length;) {
+    const seg = segments[i];
+    if (!seg.inWindow) {
+      host.appendChild(el('span', seg.classes.join(' '), seg.text));
+      i += 1;
+      continue;
+    }
+    const ring = el('span', 'npub-window');
+    while (i < segments.length && segments[i].inWindow) {
+      const part = segments[i];
+      ring.appendChild(el('span', `${part.classes.join(' ')} npub-window-part`, part.text));
+      i += 1;
+    }
+    if (win?.label) {
+      ring.title = win.label;
+      ring.setAttribute('aria-label', `raindrop window: ${win.label}`);
+    }
+    host.appendChild(ring);
+  }
   return host;
 }
 
@@ -162,9 +275,20 @@ export function renderNpub(npub, opts = {}, tagName = 'span') {
  * Build the grinding visualisation.
  *
  * @param {HTMLElement} root
- * @param {{floor?: number, antiPhish?: number, rows?: number, target?: string}} opts
+ * @param {{floor?: number, antiPhish?: number, rows?: number, target?: string,
+ *          gridChars?: number, windowSize?: number}} opts
  */
-export function createGrindViz(root, { floor = 3, antiPhish = ANTI_PHISH_CHARS, rows = 12, gridChars = GRID_CHARS } = {}) {
+export function createGrindViz(
+  root,
+  {
+    floor = DEFAULT_PARAMS.vanityChars,
+    antiPhish = ANTI_PHISH_CHARS,
+    rows = 12,
+    gridChars = GRID_CHARS,
+    target = DEFAULT_PARAMS.vanityTarget,
+    windowSize = DEFAULT_PARAMS.windowSize,
+  } = {},
+) {
   root.classList.add('grind-viz');
 
   const head = el('div', 'grind-head');
@@ -174,10 +298,35 @@ export function createGrindViz(root, { floor = 3, antiPhish = ANTI_PHISH_CHARS, 
   root.appendChild(head);
   head.insertAdjacentHTML('afterbegin', '<span class="grind-dot" aria-hidden="true"></span>');
 
+  // ── the target word, being mined character by character ───────────────────
+  // The shell ships in index.html (so it is in the served HTML); the characters
+  // themselves always come from DEFAULT_PARAMS.vanityTarget, never the markup.
+  const targetStrip = root.querySelector('#target-strip') ?? el('div', 'target-strip');
+  let targetWord = targetStrip.querySelector('#target-word');
+  if (!targetWord) {
+    targetWord = el('span', 'target-word npub');
+    targetWord.id = 'target-word';
+    targetStrip.appendChild(targetWord);
+  }
+  targetStrip.classList.add('target-strip');
+  root.insertBefore(targetStrip, head);
+  let matchedChars = 0;
+  /** solid green up to the furthest prefix the search has actually matched. */
+  function bumpMatched(chars) {
+    const next = Math.max(0, Math.min(Number(chars) || 0, target.length));
+    if (next <= matchedChars) return;
+    matchedChars = next;
+    renderTargetStrip(targetWord, matchedChars, target);
+  }
+  renderTargetStrip(targetWord, 0, target);
+
   const headline = el('div', 'grind-headline');
   headline.appendChild(el('span', 'grind-headline-label', 'your minted key — green = mined proof of work, orange = anti-phish zone'));
   const headlineNpub = el('div', 'grind-headline-npub npub', 'npub1…');
   headline.appendChild(headlineNpub);
+  const raindropBadge = el('span', 'raindrop-badge');
+  raindropBadge.hidden = true;
+  headline.appendChild(raindropBadge);
   root.appendChild(headline);
 
   const stats = el('dl', 'grind-stats');
@@ -222,12 +371,26 @@ export function createGrindViz(root, { floor = 3, antiPhish = ANTI_PHISH_CHARS, 
   legend.innerHTML =
     '<span class="legend-swatch legend-vanity"></span> green = mined leet prefix (real proof of work, verified by eye) ' +
     '<span class="legend-swatch legend-antiphish"></span> orange = anti-phish zone (look at it; it is not mined) ' +
+    '<span class="legend-swatch legend-window" aria-hidden="true"></span> ring = raindrop window ' +
+    `(${windowSize} chars, ≤${DEFAULT_PARAMS.maxUnique} distinct) ` +
     '<span class="legend-swatch legend-grid" aria-hidden="true"></span> grid colour = character identity (same char, same colour everywhere)';
   root.appendChild(legend);
 
   let finder = null;
   let gridFrame = 0;
   let pending = null;
+
+  /** Window descriptor for the npub text/grid, from the miner's scan result. */
+  function windowFromScan(scan) {
+    if (!scan?.found || !Number.isFinite(scan.start) || !scan.windowSize) return null;
+    return {
+      start: scan.start,
+      length: scan.windowSize,
+      unique: scan.unique,
+      rarity: scan.rarity,
+      label: lowEntropyLabel(scan),
+    };
+  }
 
   /**
    * Paint the fingerprint grid for one candidate (rAF-throttled: one paint per
@@ -284,6 +447,9 @@ export function createGrindViz(root, { floor = 3, antiPhish = ANTI_PHISH_CHARS, 
     if (!sample?.npub) return;
     // the live fingerprint of the candidate being tried right now
     scheduleGridPaint(sample);
+    // the strip fills in as candidate prefixes actually match, so the visitor
+    // watches the target word get spelled out by real work
+    bumpMatched(sample.chars ?? 0);
     const row = el('li', 'npub-row');
     row.appendChild(renderNpub(sample.npub, { chars: sample.chars, floor, antiPhish }));
     const score = el('span', 'npub-score', sample.chars ? `${sample.chars}/${floor}` : '');
@@ -309,16 +475,35 @@ export function createGrindViz(root, { floor = 3, antiPhish = ANTI_PHISH_CHARS, 
     root.dataset.state = cls || 'idle';
   }
 
-  /** Show the winning key (replaces the strip with the minted npub). */
-  function setFound({ npub, chars, bits }) {
-    finder = { npub, chars, bits };
-    headlineNpub.replaceChildren(...renderNpub(npub, { chars, floor, antiPhish }).childNodes);
-    // freeze the fingerprint on the minted candidate so the green columns stay readable
+  /**
+   * Show the winning key: full npub with the mined prefix, the anti-phish zone
+   * and — when the miner hands over its raindrop scan — a ring around the
+   * low-entropy window plus the `6 unique in 9 · rarity 2.0` badge.
+   */
+  function setFound({ npub, chars, bits, scan }) {
+    finder = { npub, chars, bits, scan };
+    const win = windowFromScan(scan);
+    bumpMatched(chars ?? 0);
+    headlineNpub.replaceChildren(...renderNpub(npub, { chars, floor, antiPhish, window: win }).childNodes);
+    if (win) {
+      raindropBadge.hidden = false;
+      raindropBadge.textContent = `raindrop · ${win.label}`;
+      raindropBadge.title = `low-entropy window at body offset ${win.start}: ${win.label}`;
+      root.dataset.raindrop = String(win.unique);
+    } else {
+      raindropBadge.hidden = true;
+      raindropBadge.textContent = '';
+      delete root.dataset.raindrop;
+    }
+    // freeze the fingerprint on the minted candidate so the green columns stay
+    // readable, and widen it if the raindrop sits past the shown characters
     if (npub) {
       const body = npubBody(npub);
-      gridHost.innerHTML = renderFingerprintGrid(body.slice(0, gridChars), gridChars);
+      const shown = win ? Math.max(gridChars, win.start + win.length) : gridChars;
+      gridHost.dataset.width = String(shown);
+      gridHost.innerHTML = renderFingerprintGrid(body.slice(0, shown), shown, { window: win });
       gridCandidate.replaceChildren(
-        ...renderNpub(`npub1${body.slice(0, Math.max(gridChars, 16))}…`, { chars, floor, antiPhish }).childNodes,
+        ...renderNpub(`npub1${body.slice(0, Math.max(shown, 16))}…`, { chars, floor, antiPhish, window: win }).childNodes,
       );
       gridHost.classList.add('fingerprint-grid-host-found');
     }
@@ -328,12 +513,29 @@ export function createGrindViz(root, { floor = 3, antiPhish = ANTI_PHISH_CHARS, 
 
   function reset() {
     strip.replaceChildren();
+    matchedChars = 0;
+    renderTargetStrip(targetWord, 0, target);
     headlineNpub.textContent = 'npub1…';
+    raindropBadge.hidden = true;
+    raindropBadge.textContent = '';
+    delete root.dataset.raindrop;
     gridHost.classList.remove('fingerprint-grid-host-found');
+    gridHost.dataset.width = String(gridChars);
     gridHost.innerHTML = renderFingerprintGrid('', gridChars);
     gridCandidate.replaceChildren();
     root.classList.remove('grind-found');
   }
 
-  return { push, setStats, setState, setFound, reset, get found() { return finder; }, element: root, grid: gridHost };
+  return {
+    push,
+    setStats,
+    setState,
+    setFound,
+    reset,
+    get found() { return finder; },
+    element: root,
+    grid: gridHost,
+    targetStrip,
+    get targetMatched() { return matchedChars; },
+  };
 }
