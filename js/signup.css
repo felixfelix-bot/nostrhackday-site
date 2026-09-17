@@ -7,7 +7,12 @@
     --nhd-green-dim: rgba(63, 185, 80, 0.22);
     --nhd-orange: #f7931a;
     /* site --color-primary is the orange; aliased here for readability */
-    --nhd-mono: 'Manusquared', ui-monospace, SFMono-Regular, Menlo, monospace;
+    /* npubs, nsecs and the target word are read character by character: they get
+       a real mono face, never the display face (Manusquared). */
+    --nhd-mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
+    /* panel prose gets a readable sans stack; Manusquared stays for the display
+       headings (hero, .grind-title) where legibility is not the job. */
+    --nhd-read: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Ubuntu, Cantarell, 'Helvetica Neue', Arial, sans-serif;
 }
 
 .signup-body {
@@ -16,6 +21,7 @@
     padding: var(--spacing-lg) var(--spacing-md) var(--spacing-2xl);
     display: grid;
     gap: var(--spacing-lg);
+    font-family: var(--nhd-read);
 }
 
 .panel {
@@ -48,11 +54,11 @@
 }
 
 .muted {
-    color: #9a9a9a;
+    color: #b4b4b4;
 }
 
 .small {
-    font-size: 0.8rem;
+    font-size: 0.9rem;
 }
 
 a {
@@ -63,8 +69,8 @@ a {
 
 .npub {
     font-family: var(--nhd-mono);
-    font-size: 0.95rem;
-    letter-spacing: 0.02em;
+    font-size: 1rem;
+    letter-spacing: 0.03em;
     word-break: break-all;
     white-space: normal;
 }
@@ -137,8 +143,8 @@ a {
 }
 
 .target-strip-label {
-    color: #8a8a8a;
-    font-size: 0.75rem;
+    color: #a8a8a8;
+    font-size: 0.8rem;
     letter-spacing: 0.08em;
     text-transform: uppercase;
 }
@@ -252,15 +258,15 @@ a {
 }
 
 .grind-headline-label {
-    font-size: 0.8rem;
+    font-size: 0.85rem;
     font-weight: 600;
     letter-spacing: 0.05em;
     text-transform: uppercase;
-    color: #9a9a9a;
+    color: #b4b4b4;
 }
 
 .grind-headline-npub {
-    font-size: 0.95rem;
+    font-size: 1rem;
 }
 
 .grind-stats {
@@ -322,9 +328,9 @@ a {
 }
 
 .grind-legend {
-    font-size: 0.8rem;
+    font-size: 0.85rem;
     font-weight: 500;
-    color: #9a9a9a;
+    color: #b4b4b4;
     display: flex;
     flex-wrap: wrap;
     gap: 0.4rem;
@@ -377,8 +383,8 @@ a {
 }
 
 .status-line {
-    font-size: 0.8rem;
-    color: #9a9a9a;
+    font-size: 0.9rem;
+    color: #b4b4b4;
 }
 
 .status-line[data-state='mining'],

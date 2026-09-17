@@ -292,7 +292,7 @@ export function createGrindViz(
   root.classList.add('grind-viz');
 
   const head = el('div', 'grind-head');
-  head.appendChild(el('span', 'grind-title', 'MINING YOUR NPUB'));
+  head.appendChild(el('span', 'grind-title', 'Mining your RSVP'));
   const stateBadge = el('span', 'grind-state', 'starting…');
   head.appendChild(stateBadge);
   root.appendChild(head);
@@ -309,7 +309,10 @@ export function createGrindViz(
     targetStrip.appendChild(targetWord);
   }
   targetStrip.classList.add('target-strip');
-  root.insertBefore(targetStrip, head);
+  // the target strip is the first row of the panel, whatever the markup shipped:
+  // everything the page put after it in #grind (the progress bar and its label)
+  // stays directly underneath.
+  root.prepend(targetStrip);
   let matchedChars = 0;
   /** solid green up to the furthest prefix the search has actually matched. */
   function bumpMatched(chars) {
@@ -321,7 +324,7 @@ export function createGrindViz(
   renderTargetStrip(targetWord, 0, target);
 
   const headline = el('div', 'grind-headline');
-  headline.appendChild(el('span', 'grind-headline-label', 'your minted key — green = mined proof of work, orange = anti-phish zone'));
+  headline.appendChild(el('span', 'grind-headline-label', 'your minted key — green = mined · orange = anti-phish'));
   const headlineNpub = el('div', 'grind-headline-npub npub', 'npub1…');
   headline.appendChild(headlineNpub);
   const raindropBadge = el('span', 'raindrop-badge');
@@ -369,11 +372,10 @@ export function createGrindViz(
 
   const legend = el('p', 'grind-legend');
   legend.innerHTML =
-    '<span class="legend-swatch legend-vanity"></span> green = mined leet prefix (real proof of work, verified by eye) ' +
-    '<span class="legend-swatch legend-antiphish"></span> orange = anti-phish zone (look at it; it is not mined) ' +
-    '<span class="legend-swatch legend-window" aria-hidden="true"></span> ring = raindrop window ' +
-    `(${windowSize} chars, ≤${DEFAULT_PARAMS.maxUnique} distinct) ` +
-    '<span class="legend-swatch legend-grid" aria-hidden="true"></span> grid colour = character identity (same char, same colour everywhere)';
+    '<span class="legend-swatch legend-vanity" title="mined leet prefix — real proof of work"></span> green = mined · ' +
+    '<span class="legend-swatch legend-antiphish" title="anti-phish zone — not mined"></span> orange = anti-phish · ' +
+    `<span class="legend-swatch legend-window" title="raindrop: ${windowSize}-char window with ≤${DEFAULT_PARAMS.maxUnique} distinct characters" aria-hidden="true"></span> ring = raindrop · ` +
+    '<span class="legend-swatch legend-grid" title="character identity: one colour per character"></span> colour = character';
   root.appendChild(legend);
 
   let finder = null;

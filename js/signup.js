@@ -611,7 +611,7 @@ function formContent() {
   const val = (id) => $(id)?.value?.trim() ?? '';
   return JSON.stringify({
     v: 1,
-    name: val('f-name').slice(0, 80),
+    nym: val('f-name').slice(0, 80),
     alias: val('f-alias').slice(0, 80),
     intent: val('f-intent'),
     skill: val('f-skill').slice(0, 200),
@@ -626,7 +626,7 @@ function validate() {
   if (state.detailsPublished) return 'Already submitted.';
   if (!state.mined) return 'Proof of work is still being mined — hang on a moment.';
   if (state.proof?.status === 'publishing') return 'Just finishing the proof event — one moment.';
-  if ($('f-name').value.trim().length < 2) return 'Please give a name (2+ characters).';
+  if ($('f-name').value.trim().length < 2) return 'Please give a nym (2+ characters).';
   if ($('f-intent').value === '') return 'Please pick what you want to do at the hackday.';
   if (!$('f-consent').checked) return 'Please confirm the RSVP is published publicly to relays.';
   if (!SELFTEST) {

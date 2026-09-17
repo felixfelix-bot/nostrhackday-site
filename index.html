@@ -69,23 +69,7 @@
              mined and nothing is published on a page load (ADDENDUM 2). The panel is
              focusable so pressing RSVP moves the visitor straight to it. ─────────── -->
         <section class="panel mine-panel" id="mining" tabindex="-1">
-            <h2 class="mine-title">MINING YOUR NPUB <span class="mine-badge">live proof of work</span></h2>
-            <p class="mine-lead">
-                From the moment you press RSVP your browser is <strong>grinding real nostr
-                keypairs</strong> on every core it can grab, and keeping the one whose <strong>npub
-                spells the leet target</strong>. Every
-                matched character is 5 bits of real work: <strong>the mined prefix IS the
-                proof</strong>. The grid below shows the candidate being tried right now — one fixed
-                colour per character. The word's second half cannot be spelled at all, so instead your
-                npub must contain a <strong>raindrop</strong>: any 9-character window with at most 6
-                distinct characters.
-            </p>
-            <p class="mine-lead">
-                The moment the grind clears the current rung this page publishes a <strong>kind 1337
-                proof event by itself</strong> — no fields, no consent box, nothing personal: just the
-                nonce, the bits and your npub's mined prefix. Only after that does the details form
-                appear, and with it the option to export the key (the nsec) before this tab is gone.
-            </p>
+            <h2 class="mine-title">Mining your RSVP <span class="mine-badge">live proof of work</span></h2>
             <div id="grind">
                 <!-- target-word strip: the shell ships here so it is in the served HTML; the
                      characters are always written from DEFAULT_PARAMS.vanityTarget in js/viz.js -->
@@ -94,15 +78,17 @@
                     <span class="target-word npub" id="target-word" role="img" aria-label="target word: 0 characters mined"></span>
                     <span class="target-count" id="target-count">0/12</span>
                 </div>
+                <!-- progress bar: right under the target strip, so the mined progress and
+                     the bar that measures it are read as one unit -->
+                <div class="mine-track">
+                    <div class="mine-bar" id="mine-bar"></div>
+                </div>
+                <p class="mine-label muted small" id="mine-label">starting…</p>
                 <!-- filled by js/viz.js; shipped empty so the grid frame exists in the served HTML -->
                 <div class="fingerprint-grid-host" data-grid-chars="12">
                     <noscript><p class="muted small">The live fingerprint grid needs JavaScript.</p></noscript>
                 </div>
             </div>
-            <div class="mine-track" style="margin-top:0.75rem">
-                <div class="mine-bar" id="mine-bar"></div>
-            </div>
-            <p class="mine-label muted small" id="mine-label" style="margin-top:0.4rem">starting…</p>
             <p class="status-line" id="status-line" data-state="idle">Press RSVP to start mining your npub</p>
             <!-- flow v2: the unattended proof event, revealed the moment it is published -->
             <div class="proof-panel" id="proof-panel" hidden>
@@ -127,8 +113,8 @@
             <form id="rsvp-form" novalidate>
                 <div class="form-grid">
                     <div class="field">
-                        <label for="f-name">Name</label>
-                        <input id="f-name" name="name" autocomplete="name" required>
+                        <label for="f-name">Nym</label>
+                        <input id="f-name" name="nym" placeholder="what you want to be called" autocomplete="off" required>
                     </div>
                     <div class="field">
                         <label for="f-alias">Nostr handle / alias</label>
@@ -226,7 +212,7 @@
         <section class="panel" id="result" hidden>
             <h2>Your RSVP</h2>
             <div class="result-npub">
-                <div class="muted small">your npub (green = mined, orange = anti-phish zone, ring = raindrop window)</div>
+                <div class="muted small">your npub — green = mined · orange = anti-phish · ring = raindrop</div>
                 <div class="npub" id="result-npub"></div>
                 <p class="muted small raindrop-badge" id="result-raindrop" hidden></p>
             </div>

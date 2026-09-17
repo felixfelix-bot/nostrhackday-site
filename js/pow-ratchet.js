@@ -515,7 +515,11 @@ export function describeRsvp(event) {
   const data = parseContentData(event.content);
   const status = event.tags.find((t) => t[0] === 'status')?.[1] ?? null;
   return {
-    name: typeof data.name === 'string' ? data.name : null,
+    // The form asks for a *nym* and publishes it under `nym`. The field keeps
+    // the name `name` here on purpose: the counter, the collector script and
+    // the tests all read one key, and events published before the rename
+    // (which carry `name`) stay readable.
+    name: typeof data.nym === 'string' ? data.nym : typeof data.name === 'string' ? data.name : null,
     alias: typeof data.alias === 'string' ? data.alias : null,
     intent: typeof data.intent === 'string' ? data.intent : null,
     status,
