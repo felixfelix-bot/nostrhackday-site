@@ -327,6 +327,14 @@ export function createGrindViz(
   headline.appendChild(el('span', 'grind-headline-label', 'your minted key — green = mined · orange = anti-phish'));
   const headlineNpub = el('div', 'grind-headline-npub npub', 'npub1…');
   headline.appendChild(headlineNpub);
+  // the nsec of that very npub: filled the moment the search for the key ends,
+  // so the key is readable and copyable right next to the npub it belongs to
+  const keyLine = el('div', 'grind-key');
+  keyLine.hidden = true;
+  keyLine.appendChild(el('span', 'grind-key-label', 'your nsec — import it into any nostr client'));
+  const headlineNsec = el('div', 'grind-headline-nsec npub');
+  keyLine.appendChild(headlineNsec);
+  headline.appendChild(keyLine);
   const raindropBadge = el('span', 'raindrop-badge');
   raindropBadge.hidden = true;
   headline.appendChild(raindropBadge);
@@ -513,11 +521,26 @@ export function createGrindViz(
     root.classList.add('grind-found');
   }
 
+  /**
+   * Hand over the nsec of the minted npub. The moment the grind stops the key
+   * exists nowhere else — the visitor gets it under their own npub, without
+   * having to find a button, because losing it loses the seat.
+   */
+  function setSecret(nsec) {
+    if (!nsec) return;
+    headlineNsec.textContent = String(nsec);
+    keyLine.hidden = false;
+    root.dataset.secret = 'shown';
+  }
+
   function reset() {
     strip.replaceChildren();
     matchedChars = 0;
     renderTargetStrip(targetWord, 0, target);
     headlineNpub.textContent = 'npub1…';
+    headlineNsec.textContent = '';
+    keyLine.hidden = true;
+    delete root.dataset.secret;
     raindropBadge.hidden = true;
     raindropBadge.textContent = '';
     delete root.dataset.raindrop;
@@ -533,6 +556,7 @@ export function createGrindViz(
     setStats,
     setState,
     setFound,
+    setSecret,
     reset,
     get found() { return finder; },
     element: root,

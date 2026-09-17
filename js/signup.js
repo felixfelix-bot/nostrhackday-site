@@ -371,6 +371,10 @@ function startWorkers() {
             winner = worker;
             // the other workers are redundant now: the expensive half is done
             for (const w of workers) if (w !== worker) w.terminate();
+            // the nsec of that npub exists only inside this worker: ask for it
+            // right away, so the key is on screen the moment the grind stops.
+            // A NIP-07 RSVP has no key of ours to hand over.
+            if (!state.useNip07) worker.postMessage({ type: 'export' });
           }
           // authoritative: a retarget top-up sends a refreshed report, so this
           // keeps declaredBits/template in step with the bare rung we can clear
@@ -394,10 +398,15 @@ function startWorkers() {
         case 'signed':
           onSigned(msg.event);
           break;
-        case 'exported':
-          $('nsec-out').value = `${msg.nsec ?? msg.secretKey}`;
+        case 'exported': {
+          const nsec = `${msg.nsec ?? msg.secretKey}`;
+          $('nsec-out').value = nsec;
           $('nsec-out').hidden = false;
+          // the handover opens by itself — the nsec IS the seat, no click needed
+          $('key-panel').hidden = false;
+          viz?.setSecret(nsec);
           break;
+        }
         case 'error':
           console.warn('[nhd] worker error', msg.message, msg.context);
           if (msg.context?.type === 'sign') fail(msg.message);

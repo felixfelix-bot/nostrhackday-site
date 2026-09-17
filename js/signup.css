@@ -269,6 +269,31 @@ a {
     font-size: 1rem;
 }
 
+/* the nsec handover: boxed under the npub it belongs to, readable and copyable
+   the second the grind stops — nothing between the visitor and their key */
+.grind-key {
+    margin-top: 0.35rem;
+    padding: 0.45rem 0.6rem;
+    background: #101410;
+    border: 1px solid var(--nhd-green);
+    border-radius: var(--border-radius-sm, 4px);
+}
+
+.grind-key-label {
+    display: block;
+    font-size: 0.8rem;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: #b4b4b4;
+    margin-bottom: 0.15rem;
+}
+
+.grind-headline-nsec {
+    font-size: 1rem;
+    color: #9fe0a8;
+}
+
 .grind-stats {
     display: flex;
     flex-wrap: wrap;
