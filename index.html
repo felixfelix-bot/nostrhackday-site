@@ -5,8 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>NOSTR HACKDAY</title>
     <meta name="description" content="Nostrhackday — a daytime hackday for building on Nostr, Tue 29.09.2026 at c-base Berlin. RSVP with proof of work: your browser mines your npub.">
-    <link rel="stylesheet" type="text/css" href="style.css?v=4e09c6cb0a">
-    <link rel="stylesheet" type="text/css" href="js/signup.css?v=4e09c6cb0a">
+    <link rel="stylesheet" type="text/css" href="style.css?v=8cea95bf77">
+    <link rel="stylesheet" type="text/css" href="js/signup.css?v=8cea95bf77">
     <link rel="icon" href="favicon.ico" type="image/x-icon">
 </head>
 <body class="onepage">
@@ -84,6 +84,7 @@
                     <div class="mine-bar" id="mine-bar"></div>
                 </div>
                 <p class="mine-label muted small" id="mine-label">nothing mined yet</p>
+                <p class="mine-note muted small" id="mine-note">Didn't make the cut? You're still welcome — come to c-base anyway.</p>
             </div>
             <p class="status-line" id="status-line" data-state="idle">Press RSVP to start mining your npub</p>
             <!-- flow v2: the unattended proof event, revealed the moment it is published -->
@@ -186,7 +187,6 @@
             <dl class="counter-figures">
                 <div class="figure"><dt>accepted</dt><dd id="counter-accepted">0</dd></div>
                 <div class="figure"><dt>events seen</dt><dd id="counter-total">0</dd></div>
-                <div class="figure"><dt>seats open</dt><dd id="counter-seats">?</dd></div>
                 <div class="figure"><dt>next RSVP needs</dt><dd id="counter-next">16 bits</dd></div>
             </dl>
             <p class="muted small" id="counter-floor"></p>
@@ -232,6 +232,6 @@
         </p>
     </footer>
 
-    <script type="module" src="js/signup.js?v=4e09c6cb0a"></script>
+    <script type="module" src="js/signup.js?v=8cea95bf77"></script>
 </body>
 </html>

@@ -561,11 +561,10 @@ test('resolve: escalation is +1 bit per 2 accepted, and the ladder closes on the
   assert.equal(requiredBits(45), null, 'no 46th seat');
 
   // ---- same escalation, observed end-to-end at test scale ------------------
-  // The SET rule sorts by difficulty DESC and then accepts the longest prefix
-  // with bits[k] >= rung(k). Rungs ascend while bits descend, so the binding
-  // constraint is always the WEAKEST accepted member: to seat n RSVPs every one
-  // of them must clear rung(n-1). That is what keeps the result a set (not an
-  // arrival chain) and what makes it idempotent under re-computation.
+  // The STICKY rule walks candidates in arrival order (created_at ASC) and
+  // accepts each one that clears the rung for the seat it is claiming, then never
+  // re-judges it. A seat, once taken, is therefore never surrendered — the rung
+  // only governs newcomers.
 
   // three 6-bit RSVPs: seats 0,1 need 5 bits, seat 2 needs 6 -> all three seat
   const c1 = await makeRsvp({ nonceBits: 1, createdAt: 2000 });
@@ -581,7 +580,7 @@ test('resolve: escalation is +1 bit per 2 accepted, and the ladder closes on the
   const after4 = resolve([c1.event, c2.event, c3.event, d.event], SMALL);
   assert.equal(after4.accepted.length, 4);
   assert.equal(after4.nextRequiredBits, 7, '+1 bit once 4 are accepted');
-  assert.deepEqual(after4.accepted.map((x) => x.bits), [7, 6, 6, 6], 'sorted by difficulty, not arrival');
+  assert.deepEqual(after4.accepted.map((x) => x.bits), [6, 6, 6, 7], 'listed by seat, i.e. arrival order');
   assert.deepEqual(after4.accepted.map((x) => x.rung), [5, 5, 6, 6]);
 
   // the new rung is real: a 6-bit RSVP can no longer take the 5th seat
@@ -607,25 +606,37 @@ test('resolve: escalation is +1 bit per 2 accepted, and the ladder closes on the
   assert.equal(afterFull.rejected.at(-1).reason, REASONS.LADDER_FULL);
 });
 
-test('resolve: a stronger RSVP takes the cheap seat and displaces the weakest tie (documented SET behaviour)', async () => {
+test('resolve: acceptance is sticky — a stronger late RSVP does not displace an accepted seat', async () => {
   const a = await makeRsvp({ nonceBits: 0, createdAt: 2000 }); // 5 bits, older
   const b = await makeRsvp({ nonceBits: 0, createdAt: 2001 }); // 5 bits, newer
-  const strong = await makeRsvp({ nonceBits: 1, createdAt: 2002 }); // 6 bits
+  const strong = await makeRsvp({ nonceBits: 1, createdAt: 2002 }); // 6 bits, newest
 
   const two = resolve([a.event, b.event], SMALL);
   assert.equal(two.accepted.length, 2, 'both 5-bit RSVPs seat at rung 5');
   assert.equal(two.nextRequiredBits, 6);
 
   const three = resolve([a.event, b.event, strong.event], SMALL);
-  assert.equal(three.accepted.length, 2, 'seat count cannot grow without paying the new rung');
+  assert.equal(three.accepted.length, 3, 'the earlier seats stay accepted; the rung only governs newcomers');
   assert.deepEqual(
     three.accepted.map((x) => x.id),
-    [strong.event.id, a.event.id],
-    'the 6-bit RSVP takes seat 0 and the newer 5-bit tie loses its seat',
+    [a.event.id, b.event.id, strong.event.id],
+    'seat order is arrival order, not difficulty order',
   );
-  assert.equal(three.rejected.at(-1).reason, REASONS.INSUFFICIENT_DIFFICULTY);
+  assert.ok(
+    three.accepted.some((x) => x.id === b.event.id),
+    'retroactive-drop regression: the weaker-but-earlier seat survives the stronger newcomer',
+  );
+  assert.equal(three.nextRequiredBits, 6, 'still 6 until a 4th seat is taken');
+
+  // a genuinely too-weak newcomer is rejected without touching the seated three
+  const weak4 = await makeRsvp({ nonceBits: 0, createdAt: 2003 }); // 5 bits vs rung(3)=6
+  const four = resolve([a.event, b.event, strong.event, weak4.event], SMALL);
+  assert.equal(four.accepted.length, 3, 'the 5-bit newcomer cannot pay the 6-bit rung');
+  assert.deepEqual(four.accepted.map((x) => x.id), three.accepted.map((x) => x.id));
+  assert.equal(four.rejected.at(-1).reason, REASONS.INSUFFICIENT_DIFFICULTY);
+
   // ...and the same holds whatever order the events arrive in
-  const shuffled = resolve([strong.event, b.event, a.event], SMALL);
+  const shuffled = resolve([strong.event, weak4.event, b.event, a.event], SMALL);
   assert.deepEqual(shuffled.accepted.map((x) => x.id), three.accepted.map((x) => x.id));
 });
 

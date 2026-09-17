@@ -38,24 +38,29 @@ Difficulty = **leet npub prefix bits + NIP-13 nonce bits**:
 | `cap` | 22 bits | ladder closes; **14 unvetted seats** total |
 | `vanityChars` | 3 | visible floor (`n05`), ~32³ = 32,768 keygens ≈ 1 min single-thread |
 
-Acceptance is a **set rule**, not an arrival chain:
+Acceptance is **sticky** — a seat, once taken, is never re-judged:
 
 1. drop anything that fails verification (below);
 2. keep one event per pubkey (highest difficulty wins, ties by newest);
-3. sort by difficulty desc, then `created_at` asc, then `id` asc;
-4. accept the longest prefix where `bits[k] >= rung(k)`.
+3. sort by `created_at` asc, then `id` asc (arrival order);
+4. walk that order and accept each event whose `bits >= rung(seats accepted so
+   far)`. A failure is rejected and does not consume a seat, but the next
+   candidate is judged at the same rung.
 
-Because the sort is total and the gate only looks at the sorted prefix, the same
-set of events always produces the same result — shuffle the input, dedupe it,
-replay it in a different order, and you get an identical answer. That is what
-makes the count idempotent and grief-proof: a spammer with a high-difficulty event
-takes **one** seat (the highest), and backdating `created_at` buys nothing but a
-tiebreak.
+The result is still a pure function of the event set — shuffle the input, dedupe
+it, replay it in a different order and you get an identical answer — but it is
+**time-priority**, not strength-priority. An accepted seat is never displaced when
+a stronger RSVP arrives later, so the accepted count cannot go down.
 
-Note the consequence of step 4: rungs ascend while difficulties descend, so the
-weakest accepted RSVP is the one that has to clear the highest rung of the
-accepted prefix. Hosting a new, stronger RSVP can therefore displace a weak one —
-this is intended (strength, not timing, decides), and it is order-independent.
+> Before 2026-09-17 the rule re-ranked by difficulty DESC and accepted the
+> longest prefix (`bits[k] >= rung(k)`). Rungs ascend while difficulties descend,
+> so the weakest accepted member was the binding constraint and a rung that
+> climbed under it could retroactively reject an already-seated RSVP — the
+> "accepted resets / counter drops" reports. Sticky fixes that class.
+>
+> Tradeoff: `created_at` is now load-bearing, so an event could be backdated to
+> grab a cheaper early rung. Difficulty (vanity + nonce bits) is still recomputed
+> by `verifyRsvp()`, so only the clock can be gamed, and only across 1-bit rungs.
 
 ### vetted attendees
 
@@ -137,6 +142,14 @@ rung still climbs +1 bit per 2 accepted unvetted RSVPs and then **clamps** at th
 cap — seats 12…44 all cost 2^22, so a 45-seat room does not make seat 43 cost
 2^38 (which no browser could mine). The ladder closes when the seats run out
 (`LADDER_FULL` on the 46th), not when the rung hits the cap.
+
+The page no longer prints a **seats open** figure (operator, 2026-09-17: it could
+discourage people from applying). It keeps **accepted**, **events seen** and
+**next RSVP needs**, and a note beside the grind spans the gap — "Didn't make the
+cut? You're still welcome — come to c-base anyway." The mining panel's `target`
+stat reads the live rung (`state.targetBits`), so it never shows the 16-bit floor
+while the ladder is already higher, and `retarget()` raises running workers even
+before a key has been mined.
 
 **The counter counts the store, so only events a relay actually holds may enter
 it.** Both publish paths (`onProof`, `onSigned`) publish FIRST and call

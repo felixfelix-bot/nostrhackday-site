@@ -64,7 +64,13 @@ spawn a second worker set.
    visitor who never fills the form still leaves with their key. Importing the
    nsec into any nostr signer keeps the identical identity.
 
-The live seat counter (`#counter-seats`) stays on screen throughout.
+The live counter shows **accepted**, **events seen** and **next RSVP needs**. The
+seat count is deliberately *not* shown (operator, 2026-09-17: it could discourage
+people from applying), and a note beside the grind makes clear that not clearing
+the cut still leaves the door at c-base open.
+
+Acceptance is **sticky**: once a seat is taken it is never re-evaluated, so the
+accepted count cannot go down when the rung climbs under it.
 
 ## Publishing as an nsite
 

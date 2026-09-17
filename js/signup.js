@@ -37,8 +37,8 @@ import {
   shouldAutoPublishProof,
   vanityInfo,
   verifyRsvp,
-} from './pow-ratchet.js?v=4e09c6cb0a';
-import { createGrindViz, renderNpub } from './viz.js?v=4e09c6cb0a';
+} from './pow-ratchet.js?v=8cea95bf77';
+import { createGrindViz, renderNpub } from './viz.js?v=8cea95bf77';
 
 // ── configuration ────────────────────────────────────────────────────────────
 
@@ -93,6 +93,14 @@ const state = {
   acceptedUnvetted: [],
   rejected: [],
   nextRequiredBits: PARAMS.base,
+  /**
+   * The difficulty the workers are actually grinding: the live rung, or higher
+   * once a key is being topped up. Tracked separately from `mined` so the panel
+   * can show the real target even before any key has been found (the old
+   * `mined?.targetBits ?? base` fallback printed the 16-bit floor while the
+   * workers were already grinding 18).
+   */
+  targetBits: PARAMS.base,
   signed: null,
   published: [],
   /** flow v2: the unattended proof event — filled the moment publishing starts */
@@ -178,7 +186,6 @@ function renderCounter(result, total) {
   if (!acceptedEl) return;
   acceptedEl.textContent = String(result.accepted.length);
   $('counter-total').textContent = String(total);
-  $('counter-seats').textContent = String(result.seatsOpen);
   const next = result.nextRequiredBits;
   $('counter-next').textContent = next === null ? 'ladder full' : `${next} bits`;
   $('counter-floor').textContent = `${PARAMS.vanityChars} leet chars + raindrop + ${Math.max(0, (next ?? PARAMS.base) - PARAMS.vanityChars * 5)} nonce bits`;
@@ -200,7 +207,7 @@ function renderCounter(result, total) {
       npub.append(...parts);
       const meta = document.createElement('span');
       meta.className = 'rsvp-meta';
-      meta.textContent = `${entry.bits}b${entry.vetted ? ' · vetted' : ` · seat ${entry.seat}`}${who?.name ? ` · ${who.name}` : ''}`;
+      meta.textContent = `${entry.vetted ? 'vetted' : `seat ${entry.seat}`} · mined ${entry.bits} bits · needed ${entry.rung}${who?.name ? ` · ${who.name}` : ''}`;
       li.append(npub, meta);
       return li;
     }),
@@ -347,6 +354,7 @@ function startWorkers() {
   const hw = Math.max(1, Math.min(MAX_WORKERS, navigator.hardwareConcurrency || 2));
   const seed = crypto.getRandomValues(new Uint8Array(32));
   const targetBits = Math.max(PARAMS.base, state.nextRequiredBits ?? PARAMS.base);
+  state.targetBits = targetBits;
   let finished = 0;
   const tally = () => {
     const rows = Object.values(state.progress.workers);
@@ -355,7 +363,7 @@ function startWorkers() {
   };
 
   for (let index = 0; index < hw; index += 1) {
-    const worker = new Worker('./js/pow-worker.js?v=4e09c6cb0a', { type: 'module' });
+    const worker = new Worker('./js/pow-worker.js?v=8cea95bf77', { type: 'module' });
     workers.push(worker);
     state.progress.workers[index] = { tries: 0, keysPerSecond: 0 };
     worker.onmessage = (ev) => {
@@ -392,6 +400,7 @@ function startWorkers() {
           // authoritative: a retarget top-up sends a refreshed report, so this
           // keeps declaredBits/template in step with the bare rung we can clear
           state.mined = msg;
+          if (Number.isFinite(msg.targetBits)) state.targetBits = msg.targetBits;
           if (first) {
             state.phase = 'ready';
             viz.setFound({ npub: msg.npub, chars: msg.vanityChars, bits: msg.vanityBits, scan: msg.scan });
@@ -451,14 +460,23 @@ function startWorkers() {
  * be paying twice for one seat.
  */
 function retarget(nextRequiredBits) {
-  if (!winner || nextRequiredBits === null) return;
+  if (nextRequiredBits === null) return;
   const target = detailsTargetBits();
-  const current = state.mined?.targetBits ?? PARAMS.base;
+  const current = state.targetBits ?? PARAMS.base;
   if (target <= current) return;
-  state.mined = { ...state.mined, targetBits: target };
-  winner.postMessage({ type: 'retarget', targetBits: target });
-  viz.setState(`rung moved to ${target} bits — topping up nonce`, 'topup');
-  setStatus('mining', `topping up proof of work to ${target} bits`);
+  state.targetBits = target;
+  if (winner) {
+    state.mined = { ...state.mined, targetBits: target };
+    winner.postMessage({ type: 'retarget', targetBits: target });
+    viz.setState(`rung moved to ${target} bits — topping up nonce`, 'topup');
+    setStatus('mining', `topping up proof of work to ${target} bits`);
+  } else if (state.started) {
+    // no key yet: raise every worker still grinding, so the in-flight search
+    // tracks the rung instead of finishing at a stale, cheaper target
+    for (const w of workers) w.postMessage({ type: 'retarget', targetBits: target });
+  }
+  // keep the panel's target stat in step even when nothing is grinding yet
+  renderMining();
 }
 
 // ── flow v2: the unattended proof event, then the reveal ─────────────────────
@@ -627,7 +645,7 @@ function renderMining() {
     tries: p.vanityTries,
     keysPerSecond: p.keysPerSecond,
     phase: state.proof ? 'proof grind' : state.phase === 'mining-nonce' ? 'nonce top-up' : 'vanity grind',
-    target: state.mined?.targetBits ?? PARAMS.base,
+    target: state.targetBits ?? PARAMS.base,
     elapsedMs: Date.now() - p.startedAt,
   });
   const bar = $('mine-bar');
@@ -778,7 +796,7 @@ function setStatus(kind, text, link = null) {
 
 function initViz() {
   viz = createGrindViz($('grind'), { floor: PARAMS.vanityChars });
-  viz.setStats({ target: PARAMS.base, elapsedMs: 0, tries: 0, keysPerSecond: 0, phase: 'idle' });
+  viz.setStats({ target: state.targetBits ?? PARAMS.base, elapsedMs: 0, tries: 0, keysPerSecond: 0, phase: 'idle' });
   state.progress.startedAt = Date.now();
 }
 
@@ -852,7 +870,7 @@ window.__nhd = {
   get error() { return state.error; },
   get npub() { return state.mined?.npub ?? null; },
   get bits() { return state.mined ? state.mined.vanityBits + state.mined.declaredBits : null; },
-  get targetBits() { return state.mined?.targetBits ?? null; },
+  get targetBits() { return state.mined?.targetBits ?? state.targetBits ?? null; },
   get vanityChars() { return state.mined?.vanityChars ?? null; },
   get accepted() { return state.accepted.length; },
   get rejected() { return state.rejected.length; },

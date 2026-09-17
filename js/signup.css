@@ -569,10 +569,18 @@ button.ghost {
 
 .rsvp-row {
     display: flex;
+    flex-wrap: wrap;
     gap: var(--spacing-sm);
     align-items: baseline;
     border-bottom: 1px dashed #262626;
     padding-bottom: 0.2rem;
+}
+
+/* the npub is a long unbreakable string: let it wrap rather than overflow its
+   flex item and visually run into the seat meta next to it */
+.rsvp-npub {
+    min-width: 0;
+    overflow-wrap: anywhere;
 }
 
 .rsvp-meta {

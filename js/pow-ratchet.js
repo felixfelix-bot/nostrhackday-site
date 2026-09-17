@@ -26,9 +26,12 @@
  *      difficulty = 5 * vanity_chars + declared_nonce_bits
  *      (the raindrop window adds NO bits — it is a pass/fail visible property)
  *
- * Ladder / SET rule (order-independent, idempotent, grief-proof):
- *   sort candidates by difficulty DESC (tiebreak created_at ASC, then id ASC),
- *   then accept the LONGEST PREFIX k where difficulty[k] >= requiredBits(k).
+ * Ladder / STICKY rule (deterministic, time-priority):
+ *   order candidates by ARRIVAL (created_at ASC, id ASC tiebreak), then accept
+ *   each one whose difficulty >= requiredBits(seats accepted so far). An accepted
+ *   seat is never re-evaluated, so a rung that climbs under it cannot take it
+ *   away (before 2026-09-17 the rule re-ranked by strength, so accepted seats
+ *   could be retroactively displaced — see notes/rsvp-signup.md).
  *   requiredBits(k) = BASE + floor(k / SEATS_PER_STEP) * STEP, and the ladder is
  *   closed once that exceeds CAP. Every accepted unvetted RSVP therefore costs
  *   ≈2× the one before it per two seats. Vetted (org allowlist) pubkeys sit at
@@ -543,12 +546,17 @@ export function describeRsvp(event) {
 }
 
 /**
- * The SET rule. Given ANY set of candidate RSVP events (any order, duplicates
- * included) return the accepted set, the rejected set, and the difficulty the
- * next unvetted RSVP must reach.
+ * Resolve an RSVP set. Given ANY set of candidate RSVP events (any order,
+ * duplicates included) return the accepted set, the rejected set, and the
+ * difficulty the next unvetted RSVP must reach.
  *
- * Idempotent and order-independent: shuffle or dedupe the input first and you
- * get bit-identical output.
+ * Deterministic: the result is a pure function of the event set, because arrival
+ * order is `created_at` (id ASC tiebreak). Shuffle or dedupe the input first and
+ * you get bit-identical output.
+ *
+ * STICKY acceptance: each candidate is judged exactly once, against the rung in
+ * force at the seat it arrived for, and never re-judged — so an accepted seat is
+ * never lost when the ladder climbs under it.
  */
 export function resolve(events, params = DEFAULT_PARAMS) {
   const rejected = [];
@@ -578,28 +586,30 @@ export function resolve(events, params = DEFAULT_PARAMS) {
 
   const acceptedVetted = vetted.map((v) => ({ ...v, seat: null, rung: params.base, vetted: true }));
 
+  // STICKY acceptance: walk the candidates in arrival order and judge each one
+  // against the rung in force for the seat it is claiming. A candidate that fails
+  // is rejected and does not consume a seat; the next candidate is judged at the
+  // same rung. Nothing is ever re-judged, so the rung only governs newcomers.
   const accepted = [];
-  let stopped = false;
-  for (let k = 0; k < unvetted.length; k += 1) {
-    const rung = requiredBits(k, params);
-    const candidate = unvetted[k];
+  const byArrival = [...unvetted].sort(compareForArrival);
+  for (const candidate of byArrival) {
+    const rung = requiredBits(accepted.length, params);
     if (rung === null) {
       rejected.push({ id: candidate.id, pubkey: candidate.pubkey, reason: REASONS.LADDER_FULL, detail: candidate });
-      stopped = true;
       continue;
     }
     if (candidate.bits >= rung) {
-      accepted.push({ ...candidate, seat: k, rung, vetted: false });
+      accepted.push({ ...candidate, seat: accepted.length, rung, vetted: false });
     } else {
       rejected.push({ id: candidate.id, pubkey: candidate.pubkey, reason: REASONS.INSUFFICIENT_DIFFICULTY, detail: { ...candidate, rung } });
-      stopped = true;
     }
   }
 
   const nextRung = requiredBits(accepted.length, params);
 
   return {
-    accepted: [...accepted, ...acceptedVetted].sort((a, b) => b.bits - a.bits || a.event.created_at - b.event.created_at || (a.id < b.id ? -1 : 1)),
+    // seat order (arrival) for the unvetted, then the vetted, who hold no seat
+    accepted: [...accepted, ...acceptedVetted],
     acceptedUnvetted: accepted,
     acceptedVetted,
     rejected,
@@ -607,7 +617,7 @@ export function resolve(events, params = DEFAULT_PARAMS) {
     rejectedCount: rejected.length,
     nextRequiredBits: nextRung,
     ladderFull: nextRung === null,
-    ladderClosed: stopped && nextRung === null,
+    ladderClosed: nextRung === null,
     capacity: ladderCapacity(params),
     seatsUsed: accepted.length,
     seatsOpen: nextRung === null ? 0 : ladderCapacity(params) - accepted.length,
@@ -619,6 +629,12 @@ function compareForLadder(a, b) {
   if (a.bits !== b.bits) return b.bits - a.bits;            // higher difficulty first
   if (a.event.created_at !== b.event.created_at) return a.event.created_at - b.event.created_at; // older first
   return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;            // stable id tiebreak
+}
+
+/** Arrival order for sticky acceptance: earliest `created_at` first, id tiebreak. */
+function compareForArrival(a, b) {
+  if (a.event.created_at !== b.event.created_at) return a.event.created_at - b.event.created_at;
+  return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
