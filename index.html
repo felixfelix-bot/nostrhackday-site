@@ -5,8 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>NOSTR HACKDAY</title>
     <meta name="description" content="Nostrhackday — a daytime hackday for building on Nostr, Tue 29.09.2026 at c-base Berlin. RSVP with proof of work: your browser mines your npub.">
-    <link rel="stylesheet" type="text/css" href="style.css">
-    <link rel="stylesheet" type="text/css" href="js/signup.css">
+    <link rel="stylesheet" type="text/css" href="style.css?v=edaf7fdb0d">
+    <link rel="stylesheet" type="text/css" href="js/signup.css?v=edaf7fdb0d">
     <link rel="icon" href="favicon.ico" type="image/x-icon">
 </head>
 <body class="onepage">
@@ -83,7 +83,7 @@
                 <div class="mine-track">
                     <div class="mine-bar" id="mine-bar"></div>
                 </div>
-                <p class="mine-label muted small" id="mine-label">starting…</p>
+                <p class="mine-label muted small" id="mine-label">nothing mined yet</p>
             </div>
             <p class="status-line" id="status-line" data-state="idle">Press RSVP to start mining your npub</p>
             <!-- flow v2: the unattended proof event, revealed the moment it is published -->
@@ -235,6 +235,6 @@
         </p>
     </footer>
 
-    <script type="module" src="js/signup.js"></script>
+    <script type="module" src="js/signup.js?v=edaf7fdb0d"></script>
 </body>
 </html>

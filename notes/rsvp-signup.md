@@ -113,6 +113,20 @@ ladder regardless of what the page believes.
 `window.__nhd` exposes the live page state (`phase`, `npub`, `bits`,
 `nextRequiredBits`, `accepted`, `published`, `signed`) for the same reason.
 
+## releasing: stamp the assets
+
+```
+scripts/stamp-assets.sh            # rewrite ?v=<short sha> on every local js/css url
+scripts/stamp-assets.sh --check    # exit 1 when the tree is stale — run in release
+./deploy-nsite.sh && ssh debian@23.182.128.51 'docker restart tollgate-nsite-gateway'
+```
+
+The gateway serves `cache-control: public, max-age=3600` (GitHub Pages:
+`max-age=600`) and browsers key ES modules by URL, so an unversioned deploy can be
+served as NEW html + HOUR-OLD js. That is exactly how the pulled fingerprint grid
+came back for one visitor on 2026-09-17 — the fix is the token on every local
+`<script>`, `<link>` and module specifier (including `new Worker(...)`).
+
 ## the panel has no fingerprint grid (pulled 2026-09-17)
 
 The 2D character grid and the rolling log of raw attempts are **gone** — operator

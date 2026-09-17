@@ -37,8 +37,8 @@ import {
   shouldAutoPublishProof,
   vanityInfo,
   verifyRsvp,
-} from './pow-ratchet.js';
-import { createGrindViz, renderNpub } from './viz.js';
+} from './pow-ratchet.js?v=edaf7fdb0d';
+import { createGrindViz, renderNpub } from './viz.js?v=edaf7fdb0d';
 
 // ── configuration ────────────────────────────────────────────────────────────
 
@@ -353,7 +353,7 @@ function startWorkers() {
   };
 
   for (let index = 0; index < hw; index += 1) {
-    const worker = new Worker('./js/pow-worker.js', { type: 'module' });
+    const worker = new Worker('./js/pow-worker.js?v=edaf7fdb0d', { type: 'module' });
     workers.push(worker);
     state.progress.workers[index] = { tries: 0, keysPerSecond: 0 };
     worker.onmessage = (ev) => {
@@ -761,7 +761,7 @@ function setStatus(kind, text, link = null) {
 
 function initViz() {
   viz = createGrindViz($('grind'), { floor: PARAMS.vanityChars });
-  viz.setStats({ target: PARAMS.base, elapsedMs: 0, tries: 0, keysPerSecond: 0, phase: 'vanity grind' });
+  viz.setStats({ target: PARAMS.base, elapsedMs: 0, tries: 0, keysPerSecond: 0, phase: 'idle' });
   state.progress.startedAt = Date.now();
 }
 

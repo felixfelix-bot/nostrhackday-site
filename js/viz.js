@@ -207,7 +207,7 @@ export function createGrindViz(
   // visitor presses RSVP and narrates ("Mining your RSVP") from then on.
   const titleEl = el('span', 'grind-title', 'Mine your RSVP');
   head.appendChild(titleEl);
-  const stateBadge = el('span', 'grind-state', 'starting…');
+  const stateBadge = el('span', 'grind-state', 'idle');
   head.appendChild(stateBadge);
   root.appendChild(head);
   head.insertAdjacentHTML('afterbegin', '<span class="grind-dot" aria-hidden="true"></span>');
