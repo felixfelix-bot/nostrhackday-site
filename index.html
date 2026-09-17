@@ -56,7 +56,7 @@
                 <a href="#signup"
                    class="cta-mine"
                    id="cta-mine">
-                    MINE MY NPUB <span class="cta-arrow" aria-hidden="true">→</span>
+                    RSVP <span class="cta-arrow" aria-hidden="true">→</span>
                 </a>
             </div>
         </footer>
@@ -76,6 +76,12 @@
                 npub must contain a <strong>raindrop</strong>: any 9-character window with at most 6
                 distinct characters.
             </p>
+            <p class="mine-lead">
+                The moment the grind clears the current rung this page publishes a <strong>kind 1337
+                proof event by itself</strong> — no fields, no consent box, nothing personal: just the
+                nonce, the bits and your npub's mined prefix. Only after that does the details form
+                appear, and with it the option to export the key (the nsec) before this tab is gone.
+            </p>
             <div id="grind">
                 <!-- target-word strip: the shell ships here so it is in the served HTML; the
                      characters are always written from DEFAULT_PARAMS.vanityTarget in js/viz.js -->
@@ -94,11 +100,26 @@
             </div>
             <p class="mine-label muted small" id="mine-label" style="margin-top:0.4rem">starting…</p>
             <p class="status-line" id="status-line" data-state="idle">booting…</p>
+            <!-- flow v2: the unattended proof event, revealed the moment it is published -->
+            <div class="proof-panel" id="proof-panel" hidden>
+                <p class="muted small">
+                    proof of work published — one kind 1337 event, no personal fields:
+                    <a class="npub small" id="proof-id" href="#" target="_blank" rel="noreferrer noopener">…</a>
+                </p>
+                <p class="muted small" id="proof-bits"></p>
+                <ul class="publish-log" id="proof-log"></ul>
+            </div>
         </section>
 
-        <!-- ── the form ─────────────────────────────────────────────────── -->
-        <section class="panel">
-            <h2>Your RSVP</h2>
+        <!-- ── the details form: revealed only AFTER the proof event is published ── -->
+        <section class="panel" id="details-panel" hidden>
+            <h2>Your details <span class="mine-badge">optional</span></h2>
+            <p class="muted small">
+                Your proof of work is <strong>already published</strong>: the kind 1337 event above carries
+                nothing personal and it holds your seat. Everything below is a second event, signed with the
+                <strong>same key at the same rung</strong> — it verifies identically and does
+                <strong>not</strong> take another seat. The checkbox applies to <em>this</em> event only.
+            </p>
             <form id="rsvp-form" novalidate>
                 <div class="form-grid">
                     <div class="field">
@@ -159,9 +180,24 @@
 
                 <div class="result-actions">
                     <button type="submit" id="btn-submit">Submit RSVP</button>
-                    <button type="button" class="ghost" id="keep-key">Keep my key (export nsec)</button>
                 </div>
             </form>
+        </section>
+
+        <!-- ── the nsec handover: revealed with the form, before any submission ─── -->
+        <section class="panel" id="key-panel" hidden>
+            <h2>Keep your key <span class="mine-badge">nsec</span></h2>
+            <p class="muted small">
+                The proof event — and anything you publish above — was signed with a key that lives
+                <strong>only in this tab</strong>. Export it to keep the npub: the proof of work belongs to
+                the key, not to this browser session. Importing the nsec into a NIP-07 signer
+                (nos2x, Alby, nostore) keeps the identical identity everywhere else.
+            </p>
+            <textarea class="nsec-out" id="nsec-out" rows="2" readonly hidden></textarea>
+            <div class="result-actions">
+                <button type="button" class="ghost" id="keep-key">Keep my key (export nsec)</button>
+                <button type="button" class="ghost" id="download-key">Download key file</button>
+            </div>
         </section>
 
         <!-- ── live counter ─────────────────────────────────────────────── -->
@@ -194,14 +230,8 @@
             <p class="npub small" id="result-id"></p>
             <p class="muted small" id="result-bits"></p>
             <ul class="publish-log" id="publish-log"></ul>
-            <textarea class="nsec-out" id="nsec-out" rows="2" readonly hidden></textarea>
-            <p class="muted small">
-                The key lives only in this tab. Export it to keep the npub — the work belongs to the
-                key, not to you.
-            </p>
             <div class="result-actions">
-                <button type="button" class="ghost" id="download-key">Download key file</button>
-                <a class="muted small" href="#signup">↑ back to the mining panel</a>
+                <a class="muted small" href="#key-panel">↑ back to your key</a>
             </div>
         </section>
 

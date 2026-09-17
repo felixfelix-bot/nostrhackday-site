@@ -26,6 +26,7 @@ import { EventStore } from '../vendor/esm/applesauce-core@6.2.0/es2022/applesauc
 import { RelayPool } from '../vendor/esm/applesauce-relay@6.2.1/es2022/applesauce-relay.bundle.mjs';
 import {
   DEFAULT_PARAMS,
+  PROOF_STATUS,
   buildTags,
   describeRsvp,
   lowEntropyLabel,
@@ -33,6 +34,7 @@ import {
   resolve,
   scanLowEntropyWindows,
   secretKeyToNsec,
+  shouldAutoPublishProof,
   vanityInfo,
   verifyRsvp,
 } from './pow-ratchet.js';
@@ -75,10 +77,17 @@ const state = {
   mined: null,
   progress: { vanityTries: 0, nonceTries: 0, keysPerSecond: 0, hashesPerSecond: 0, workers: {}, startedAt: Date.now() },
   accepted: [],
+  acceptedUnvetted: [],
   rejected: [],
   nextRequiredBits: PARAMS.base,
   signed: null,
   published: [],
+  /** flow v2: the unattended proof event — filled the moment publishing starts */
+  proof: null,
+  /** the details form + the nsec handover, revealed only after that publish */
+  revealed: false,
+  /** the (optional) second, personal event went out */
+  detailsPublished: false,
   relayEvents: 0,
   eose: false,
   nip07: null,
@@ -105,10 +114,13 @@ function setupCounter() {
     const list = (Array.isArray(events) ? events : []).filter(isHackdayEvent);
     const result = resolve(list, PARAMS);
     state.accepted = result.accepted;
+    state.acceptedUnvetted = result.acceptedUnvetted;
     state.rejected = result.rejected;
     state.nextRequiredBits = result.nextRequiredBits;
     renderCounter(result, list.length);
     retarget(result.nextRequiredBits);
+    // the rung can move under us: re-check the v2 auto-publish on every update
+    maybeAutoPublishProof();
   });
 
   if (!RELAYS.length) {
@@ -124,6 +136,8 @@ function setupCounter() {
   setTimeout(() => {
     state.eose = true;
     setStatus('live', `live — watching ${RELAYS.length} relays`);
+    // the rung is real now (the seat count is in): a key that clears it may publish
+    maybeAutoPublishProof();
   }, 4000);
 
   pool
@@ -277,23 +291,40 @@ function startWorkers() {
           } else {
             state.progress.nonceTries += 1;
             state.progress.hashesPerSecond = msg.hashesPerSecond ?? 0;
-            state.phase = 'mining-nonce';
+            // once the v2 proof is in flight the phase belongs to the proof, so a
+            // progress tick must not flip the UI back to "topping up"
+            if (!state.proof) state.phase = 'mining-nonce';
           }
           renderMining();
           break;
-        case 'mined':
+        case 'mined': {
           finished += 1;
-          if (!winner) {
+          // a stray report from a worker we already retired is not our key
+          if (winner && winner !== worker) break;
+          const first = !winner;
+          if (first) {
             winner = worker;
-            state.mined = msg;
-            state.phase = 'ready';
-            viz.setFound({ npub: msg.npub, chars: msg.vanityChars, bits: msg.vanityBits, scan: msg.scan });
-            viz.setState('key mined — submitting is instant', 'found');
             // the other workers are redundant now: the expensive half is done
             for (const w of workers) if (w !== worker) w.terminate();
-            renderMining();
-            document.dispatchEvent(new CustomEvent('nhd:ready', { detail: msg }));
           }
+          // authoritative: a retarget top-up sends a refreshed report, so this
+          // keeps declaredBits/template in step with the bare rung we can clear
+          state.mined = msg;
+          if (first) {
+            state.phase = 'ready';
+            viz.setFound({ npub: msg.npub, chars: msg.vanityChars, bits: msg.vanityBits, scan: msg.scan });
+            viz.setState('key mined — publishing the proof at the current rung', 'found');
+            document.dispatchEvent(new CustomEvent('nhd:ready', { detail: msg }));
+          } else {
+            viz.setState(`rung moved to ${msg.targetBits} bits`, 'topup');
+          }
+          renderMining();
+          // flow v2: no click, no form — the moment we clear the rung we publish
+          maybeAutoPublishProof();
+          break;
+        }
+        case 'proof':
+          onProof(msg);
           break;
         case 'signed':
           onSigned(msg.event);
@@ -327,15 +358,165 @@ function startWorkers() {
  * Ladder moved: raise the worker's target. Monotone by construction — the page
  * never asks for less work than the worker already did, and the worker itself
  * refuses to re-grind downhill.
+ *
+ * The target is `detailsTargetBits()`, which EXCLUDES our own published proof:
+ * that event already took this seat, so topping up for it a second time would
+ * be paying twice for one seat.
  */
 function retarget(nextRequiredBits) {
   if (!winner || nextRequiredBits === null) return;
+  const target = detailsTargetBits();
   const current = state.mined?.targetBits ?? PARAMS.base;
-  if (nextRequiredBits <= current) return;
-  state.mined = { ...state.mined, targetBits: nextRequiredBits };
-  winner.postMessage({ type: 'retarget', targetBits: nextRequiredBits });
-  viz.setState(`rung moved to ${nextRequiredBits} bits — topping up nonce`, 'topup');
-  setStatus('mining', `topping up proof of work to ${nextRequiredBits} bits`);
+  if (target <= current) return;
+  state.mined = { ...state.mined, targetBits: target };
+  winner.postMessage({ type: 'retarget', targetBits: target });
+  viz.setState(`rung moved to ${target} bits — topping up nonce`, 'topup');
+  setStatus('mining', `topping up proof of work to ${target} bits`);
+}
+
+// ── flow v2: the unattended proof event, then the reveal ─────────────────────
+//
+// Nothing personal is published until the visitor fills the form. The moment the
+// mined key clears the CURRENT rung, the page publishes a kind-1337 proof event
+// carrying only machine-generated proof text and the programmatic tags — no
+// click, no form, no consent checkbox, because there is nothing personal in it.
+// The details form and the nsec handover are revealed only after that.
+
+const njumpUrl = (id) => `https://njump.me/${id}`;
+
+/** Difficulty of the key the workers mined: vanity bits + declared nonce bits. */
+const minedDifficulty = () =>
+  state.mined ? state.mined.vanityBits + (state.mined.declaredBits ?? 0) : PARAMS.base;
+
+/**
+ * The rung the details event has to clear: the rung the proof cleared (same
+ * seat, identical verification), lifted only if other RSVPs have moved the
+ * ladder since. Our OWN proof is excluded from the seat count — resolve()
+ * dedupes by pubkey through betterOf(), so the follow-up must not pay for a
+ * second seat.
+ */
+function detailsTargetBits() {
+  const mine = state.proof?.event?.id;
+  const others = state.acceptedUnvetted.filter((e) => e.id !== mine).length;
+  const othersRung = requiredBits(others, PARAMS);
+  return Math.max(PARAMS.base, state.proof?.rung ?? PARAMS.base, othersRung ?? PARAMS.base);
+}
+
+/**
+ * The auto-publish guard + trigger, called from every input that can change the
+ * answer (key mined, rung moved, relay picture settled). Exact-once per page
+ * load and monotone: see shouldAutoPublishProof() for the rules it enforces.
+ */
+function maybeAutoPublishProof() {
+  if (!winner || !state.mined) return;
+  const rung = state.nextRequiredBits;
+  const go = shouldAutoPublishProof({
+    published: !!state.proof,
+    difficulty: minedDifficulty(),
+    rung,
+    settled: RELAYS.length === 0 || state.eose,
+  });
+  if (!go) return;
+  state.proof = { status: 'publishing', rung, targetBits: rung, at: Date.now() };
+  state.phase = 'proof-publishing';
+  setStatus('working', `rung ${rung} reached — publishing the proof event…`);
+  winner.postMessage({ type: 'proof', targetBits: rung, status: PROOF_STATUS });
+}
+
+/**
+ * The proof came back ground and signed. Check it with our own verifier first —
+ * we do not publish what we cannot verify — then publish it once and reveal the
+ * rest of the flow.
+ */
+async function onProof(msg) {
+  const proof = state.proof ?? (state.proof = { status: 'publishing', rung: msg.rung ?? PARAMS.base });
+  const event = msg.event ?? null;
+  proof.event = event;
+  proof.nonce = msg.nonce;
+  proof.declaredBits = msg.declaredBits;
+  proof.rung = msg.rung ?? proof.rung;
+
+  const verdict = event ? verifyRsvp(event, PARAMS) : { ok: false, reason: 'no event' };
+  if (!verdict.ok) {
+    proof.status = 'failed';
+    proof.published = [];
+    proof.error = `our own verifier rejected the proof (${verdict.reason}) — nothing was published`;
+    revealFlow();
+    fail(proof.error);
+    document.dispatchEvent(new CustomEvent('nhd:proof', { detail: { ok: false, error: proof.error } }));
+    return;
+  }
+  proof.bits = verdict.bits;
+  store.add(event); // instant local update: our own seat appears immediately
+
+  if (!RELAYS.length) {
+    proof.published = [{ from: 'dry-run', ok: true, message: 'no relays in this run' }];
+  } else {
+    try {
+      const results = await pool.publish(RELAYS, event);
+      const list = Array.isArray(results) ? results : [results];
+      proof.published = list.map((r) => ({ from: r?.from ?? r?.url ?? 'relay', ok: !!r?.ok, message: r?.message ?? '' }));
+    } catch (e) {
+      proof.published = [{ from: 'publish', ok: false, message: String(e?.message ?? e) }];
+    }
+  }
+
+  const ok = proof.published.filter((p) => p.ok).length;
+  proof.status = ok ? 'published' : 'failed';
+  state.phase = ok ? 'proof-published' : 'proof-failed';
+  renderProof();
+  revealFlow();
+  setStatus(
+    ok ? 'ok' : 'error',
+    ok
+      ? `proof of work published (${ok}/${proof.published.length} relays) — rung ${proof.rung}, ${verdict.bits} bits`
+      : 'the proof event did not reach any relay — you can still publish the form below',
+    ok ? { href: njumpUrl(event.id), text: `${event.id.slice(0, 16)}…` } : null,
+  );
+  document.dispatchEvent(new CustomEvent('nhd:proof', { detail: { ok: !!ok, event, published: proof.published, rung: proof.rung } }));
+}
+
+/** Fill the proof panel: the bare event id + a njump link. No personal fields. */
+function renderProof() {
+  const panel = $('proof-panel');
+  if (!panel) return;
+  const proof = state.proof;
+  const event = proof?.event;
+  panel.hidden = !event;
+  if (!event) return;
+  const idLink = $('proof-id');
+  if (idLink) {
+    idLink.href = njumpUrl(event.id);
+    idLink.textContent = event.id;
+  }
+  const bitsEl = $('proof-bits');
+  if (bitsEl) bitsEl.textContent = `kind ${event.kind} · rung ${proof.rung} · ${proof.bits} bits · nonce ${proof.nonce}`;
+  const log = $('proof-log');
+  if (log) {
+    log.replaceChildren(
+      ...(proof.published ?? []).map((p) => {
+        const line = document.createElement('li');
+        line.className = p.ok ? 'pub-ok' : 'pub-fail';
+        line.textContent = `${p.ok ? '✓' : '✗'} ${p.from}${p.message ? ` — ${p.message}` : ''}`;
+        return line;
+      }),
+    );
+  }
+}
+
+/**
+ * The reveal: called only once the proof event is out (or once it failed — then
+ * the form is the visitor's only way to publish, and it is still the event that
+ * carries the consent checkbox). The nsec handover is part of the reveal, so a
+ * visitor who never fills the form still walks away with their key.
+ */
+function revealFlow() {
+  if (state.revealed) return;
+  state.revealed = true;
+  for (const id of ['details-panel', 'key-panel']) {
+    const el = $(id);
+    if (el) el.hidden = false;
+  }
 }
 
 function renderMining() {
@@ -345,7 +526,7 @@ function renderMining() {
   viz?.setStats({
     tries: p.vanityTries,
     keysPerSecond: p.keysPerSecond,
-    phase: state.phase === 'mining-nonce' ? 'nonce top-up' : 'vanity grind',
+    phase: state.proof ? 'proof grind' : state.phase === 'mining-nonce' ? 'nonce top-up' : 'vanity grind',
     target: state.mined?.targetBits ?? PARAMS.base,
     elapsedMs: Date.now() - p.startedAt,
   });
@@ -377,8 +558,9 @@ function formContent() {
 }
 
 function validate() {
-  if (state.phase === 'done') return 'Already submitted.';
+  if (state.detailsPublished) return 'Already submitted.';
   if (!state.mined) return 'Proof of work is still being mined — hang on a moment.';
+  if (state.proof?.status === 'publishing') return 'Just finishing the proof event — one moment.';
   if ($('f-name').value.trim().length < 2) return 'Please give a name (2+ characters).';
   if ($('f-intent').value === '') return 'Please pick what you want to do at the hackday.';
   if (!$('f-consent').checked) return 'Please confirm the RSVP is published publicly to relays.';
@@ -416,7 +598,8 @@ function mineForExtensionKey(content) {
     winner.postMessage({
       type: 'mineForPubkey',
       pubkey: state.nip07.pubkey,
-      targetBits: state.nextRequiredBits ?? PARAMS.base,
+      // same rung as the proof: the follow-up must land on the SAME seat
+      targetBits: detailsTargetBits(),
       content,
     });
   });
@@ -450,7 +633,8 @@ async function submit() {
     return true;
   }
 
-  winner.postMessage({ type: 'sign', content, targetBits: state.nextRequiredBits ?? PARAMS.base });
+  // the details event reuses the rung the proof cleared (never a fresh seat)
+  winner.postMessage({ type: 'sign', content, targetBits: detailsTargetBits() });
   return true;
 }
 
@@ -482,6 +666,8 @@ async function onSigned(event) {
 
 function finish() {
   state.phase = 'done';
+  state.detailsPublished = true;
+  revealFlow(); // the key handover must be visible whenever an event of ours went out
   const ok = state.published.filter((p) => p.ok).length;
   setStatus(ok ? 'ok' : 'error', ok ? `RSVP published (${ok}/${state.published.length} relays accepted)` : 'relays did not accept the RSVP');
   const box = $('publish-log');
@@ -521,11 +707,19 @@ function fail(message) {
   setStatus('error', message);
 }
 
-function setStatus(kind, text) {
+function setStatus(kind, text, link = null) {
   const el = $('status-line');
   if (!el) return;
-  el.textContent = text;
+  el.replaceChildren(document.createTextNode(text));
   el.dataset.state = kind;
+  if (link) {
+    const a = document.createElement('a');
+    a.href = link.href;
+    a.textContent = link.text;
+    a.target = '_blank';
+    a.rel = 'noreferrer noopener';
+    el.append(' ', a);
+  }
 }
 
 // ── NIP-07 detection ─────────────────────────────────────────────────────────
@@ -600,11 +794,24 @@ document.addEventListener('DOMContentLoaded', () => {
   startWorkers();
 
   if (SELFTEST) {
-    document.addEventListener('nhd:ready', () => {
+    // Flow v2 order: the page publishes the unattended PROOF event by itself and
+    // only then do we autofill + submit the details event, so the selftest walks
+    // exactly the path a visitor walks.
+    const autofill = () => {
       $('f-name').value = 'Selftest Bot';
       $('f-intent').value = 'build';
       $('f-consent').checked = true;
       setTimeout(() => submit(), 50);
+    };
+    document.addEventListener('nhd:proof', (e) => {
+      if (e.detail?.ok) autofill();
+    });
+    // safety net: if the proof never lands (e.g. the rung cannot be read at all)
+    // the details path still gets driven once the key exists
+    document.addEventListener('nhd:ready', () => {
+      setTimeout(() => {
+        if (!state.proof?.event) autofill();
+      }, 5000);
     });
   }
 });
@@ -621,6 +828,13 @@ window.__nhd = {
   get accepted() { return state.accepted.length; },
   get rejected() { return state.rejected.length; },
   get nextRequiredBits() { return state.nextRequiredBits; },
+  /** flow v2: the unattended proof event's state, and the details seat */
+  get proof() { return state.proof; },
+  get proofEvent() { return state.proof?.event ?? null; },
+  get proofStatus() { return state.proof?.status ?? null; },
+  get revealed() { return state.revealed; },
+  get detailsPublished() { return state.detailsPublished; },
+  get detailsTargetBits() { return detailsTargetBits(); },
   get signed() { return state.signed; },
   get published() { return state.published; },
   get relayEvents() { return state.relayEvents; },

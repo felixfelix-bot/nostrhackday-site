@@ -257,3 +257,37 @@ and runs `acceptSet()`. Used by signup page, collection script, and Playwright t
   per-deploy would rotate the URL and break the shared signup link once it's public).
 
 **Total ≈ 2–3 dev-days.** Matches a small single-page site.
+
+---
+
+## 7. Flow v2 — the unattended proof event (shipped 2026-09-17)
+
+Operator decision (2026-09-17): split the RSVP into **two events from one mined key**, so a visitor
+is never asked for anything before something has already been published.
+
+**Order of events, as implemented in `index.html` + `js/signup.js`:**
+
+| # | Trigger | Event | Content | Tags | Consent |
+|---|---------|-------|---------|------|---------|
+| 1 | the mined key clears the CURRENT rung | kind 1337 PROOF, auto | `{v:2,proof:1,event,bits,nonce,npub-prefix}` — machine-generated only | exactly the programmatic set (`t`, event marker, `status`, `client`, `nonce`) | none needed — nothing personal |
+| 2 | the visitor submits the details form, *if they want to* | kind 1337 details, same key | `{v:1,name,alias,intent,skill,idea,diet,contact}` | the same programmatic set at the **same rung** | the checkbox — on **this** event |
+
+**Rules that the code enforces (and the tests pin):**
+
+- **Mining starts at page load** (`DOMContentLoaded` → `startWorkers()`); nothing gates it behind a
+  click or a scroll. The CTA is labelled **RSVP**.
+- **Auto-publish is guarded by `shouldAutoPublishProof({published, difficulty, rung, settled})`**:
+  one-shot per page load, only at or above the rung, never downhill, and only once the relay picture
+  has settled (so the rung it clears is real). `maybeAutoPublishProof()` is the single call site and
+  is idempotent — it is invoked from the mined-key handler, from every store update (`retarget`), and
+  from the EOSE/settle path.
+- **The proof content and id are ground together** (`mineProofEvent`) because the nonce requirement
+  depends on both the content and the pubkey; content, tags and id come from one tuple, so the
+  verifier recomputes them rather than trusting a declared nonce.
+- **The details follow-up reuses the rung** (`detailsTargetBits()`: the rung the proof cleared, lifted
+  only if the ladder moved, with our own proof excluded from the seat count) so `resolve()`'s
+  `betterOf()` dedupe-by-pubkey sees the same seat — **one seat per person, not two**.
+- **The nsec handover is revealed with the form**, before any submission, so a visitor who never fills
+  the form still leaves with the key that holds the proof of work.
+- The live seat counter (`#counter-seats`) keeps working throughout, and `PARAMS` / the ladder maths
+  in `js/pow-ratchet.js` are unchanged.

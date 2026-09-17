@@ -18,8 +18,12 @@ import assert from 'node:assert/strict';
 import {
   BECH32_CHARSET,
   DEFAULT_PARAMS,
+  PROOF_STATUS,
   REASONS,
   buildEventTemplate,
+  buildProofContent,
+  buildProofEvent,
+  buildProofTags,
   buildTags,
   computeEventId,
   deriveCandidate,
@@ -30,11 +34,14 @@ import {
   leadingZeroBits,
   lowEntropyLabel,
   mineNonce,
+  mineProofEvent,
   mineVanityKey,
+  nonceTag,
   randomSeed,
   requiredBits,
   resolve,
   scanLowEntropyWindows,
+  shouldAutoPublishProof,
   signWithSecretKey,
   summarize,
   vanityBits,
@@ -667,4 +674,203 @@ test('shipped floor: 3 leet chars + nonce top-up verifies at BASE=16', { skip: !
     `(${(mined.tries / (vanityMs / 1000)).toFixed(0)} keygens/s, ${vanityMs}ms) nonce=${top.nonce} ` +
     `declared=${top.declaredBits} actual=${top.actualBits} bits=${v.bits} id=${event.id}`,
   );
+});
+
+// ── 6. flow v2: the unattended MINIMAL PROOF event ───────────────────────────
+//
+// The page publishes this event by itself the moment the mined key reaches the
+// current rung — no form, no consent, because it carries no personal data. It
+// still consumes a ladder seat, so the details follow-up (same key, same rung)
+// must NOT take a second one.
+
+/** Mine a real key at the test-scale floor + the joint proof nonce for it. */
+async function makeProof({ targetBits = 0, createdAt, params = SMALL } = {}) {
+  let mined = null;
+  do {
+    mined = await mineVanityKey({ seed: randomSeed(), workerIndex: 0, params, batch: 64 });
+  } while (mined.vanityChars !== params.vanityChars);
+  const info = vanityInfo(mined.pubkey, params);
+  const proof = await mineProofEvent({
+    pubkey: mined.pubkey,
+    secretKey: mined.secretKey,
+    params,
+    targetBits,
+    npubPrefix: `npub1${info.matched}`,
+    status: PROOF_STATUS,
+    createdAt: createdAt ?? Math.floor(Date.now() / 1000),
+    batch: 64,
+  });
+  assert.ok(proof, 'the proof grind returned a result');
+  return { ...proof, mined, info };
+}
+
+test('flow v2: the proof event is kind 1337 with EXACTLY the programmatic tag set and zero personal fields', async () => {
+  const { event, nonce, mined } = await makeProof({ targetBits: 1, createdAt: 900 });
+
+  assert.equal(event.kind, 1337, 'kind comes from params.kind');
+  assert.equal(event.pubkey, mined.pubkey, 'signed by the mined key');
+
+  // The FULL tag array, spelled out: a stray personal tag would fail this.
+  assert.deepEqual(event.tags, [
+    ['t', SMALL.hashtag],
+    [SMALL.tagName, SMALL.eventTag],
+    ['status', PROOF_STATUS],
+    ['client', 'nostrhackday-signup'],
+    ['nonce', String(nonce), '1'],
+  ]);
+  assert.deepEqual(event.tags.map((t) => t[0]), ['t', 'nhr', 'status', 'client', 'nonce']);
+
+  // ...and the content is exactly the machine proof text (bits / nonce / npub prefix).
+  const data = JSON.parse(event.content);
+  assert.deepEqual(Object.keys(data), ['v', 'proof', 'event', 'bits', 'nonce', 'npub']);
+  assert.deepEqual(data, {
+    v: 2,
+    proof: 1,
+    event: SMALL.eventTag,
+    bits: 1,
+    nonce: String(nonce),
+    npub: `npub1${mined.npub.slice(5, 5 + SMALL.vanityChars)}`,
+  });
+  assert.ok(mined.npub.startsWith(data.npub), 'the content prefix is the mined visible prefix');
+
+  for (const personal of ['name', 'alias', 'intent', 'skill', 'idea', 'diet', 'contact', 'email', 'ip', 'ua', 'userAgent']) {
+    assert.ok(!(personal in data), `the proof content must not carry \`${personal}\``);
+  }
+  assert.ok(!event.content.includes(mined.npub), 'the full npub never enters the proof content');
+  assert.ok(!JSON.stringify(event.tags).includes(mined.npub), 'no npub in the tags either');
+
+  // the pure builders reproduce the shipped event byte for byte (no hidden field)
+  const rebuilt = buildProofEvent({
+    pubkey: event.pubkey,
+    nonce,
+    bits: 1,
+    npubPrefix: data.npub,
+    params: SMALL,
+    status: PROOF_STATUS,
+    createdAt: event.created_at,
+  });
+  assert.deepEqual(rebuilt, {
+    pubkey: event.pubkey,
+    created_at: event.created_at,
+    kind: 1337,
+    tags: event.tags,
+    content: event.content,
+  });
+  assert.equal(event.content, buildProofContent({ bits: 1, nonce, npubPrefix: data.npub, params: SMALL }));
+  assert.deepEqual(buildProofTags({ params: SMALL, nonce, bits: 1, status: PROOF_STATUS }), event.tags);
+});
+
+test('flow v2: the proof verifies against the rung by recomputation (a declared nonce is never trusted)', async () => {
+  const bits = 1;
+  const { event, mined } = await makeProof({ targetBits: bits, createdAt: 1234 });
+  const data = JSON.parse(event.content);
+  const tag = nonceTag(event);
+
+  // content and tag state the SAME nonce, and it is the top-up we ground for
+  assert.equal(data.nonce, String(tag.value));
+  assert.equal(data.bits, tag.declaredBits);
+  assert.equal(tag.declaredBits, bits, 'the declared top-up is the rung minus the vanity bits');
+
+  // the id is recomputed from the event's own fields, never read off a claim
+  const recomputed = computeEventId({
+    pubkey: event.pubkey,
+    created_at: event.created_at,
+    kind: event.kind,
+    tags: event.tags,
+    content: event.content,
+  });
+  assert.equal(recomputed, event.id, 'id recomputes from the NIP-01 serialisation');
+  const actual = leadingZeroBits(recomputed);
+  assert.ok(actual >= bits, `the id really carries ${bits} nonce bits (got ${actual})`);
+
+  // the rung is cleared by real work: recomputed vanity bits + recomputed nonce bits
+  const vanity = vanityBits(event.pubkey, SMALL);
+  assert.equal(vanity, mined.vanityBits, 'vanity bits recompute from the pubkey');
+  assert.ok(vanity + actual >= requiredBits(0, SMALL), 'vanity + actual nonce bits clear the rung');
+  const verdict = verifyRsvp(event, SMALL);
+  assert.equal(verdict.ok, true, verdict.reason);
+  assert.equal(verdict.bits, vanity + bits);
+  assert.ok(verdict.bits >= requiredBits(0, SMALL));
+
+  // no hidden nonce: content + tags alone reproduce the same id
+  const rebuilt = {
+    pubkey: event.pubkey,
+    created_at: event.created_at,
+    kind: event.kind,
+    tags: buildProofTags({ params: SMALL, nonce: data.nonce, bits: data.bits }),
+    content: buildProofContent({ bits: data.bits, nonce: data.nonce, npubPrefix: data.npub, params: SMALL }),
+  };
+  assert.equal(computeEventId(rebuilt), event.id);
+
+  // an event that DECLARES more work than its id carries is rejected
+  const forgedTags = event.tags.map((t) => (t[0] === 'nonce' ? ['nonce', t[1], '24'] : t));
+  const forged = signWithSecretKey({
+    pubkey: event.pubkey,
+    created_at: event.created_at,
+    kind: event.kind,
+    tags: forgedTags,
+    content: event.content,
+  }, mined.secretKey);
+  assert.ok(leadingZeroBits(forged.id) < 24, 'sanity: the forged declaration really is above the achieved work');
+  assert.equal(verifyRsvp(forged, SMALL).reason, REASONS.DECLARED_BITS_EXCEEDS_ACTUAL);
+});
+
+test('flow v2: the details follow-up from the same pubkey does not consume a second ladder seat', async () => {
+  const { event: proof, mined, declaredBits } = await makeProof({ targetBits: 1, createdAt: 1000 });
+
+  const alone = resolve([proof], SMALL);
+  assert.equal(alone.seatsUsed, 1, 'the proof alone takes the seat');
+  assert.equal(alone.nextRequiredBits, 5);
+
+  // the details event: SAME mined key, SAME rung top-up — only the content differs
+  const detailsTemplate = buildEventTemplate({
+    pubkey: mined.pubkey,
+    content: JSON.stringify({
+      v: 1,
+      name: 'Ada Lovelace',
+      alias: 'ada',
+      intent: 'build',
+      skill: 'js',
+      idea: 'a relay that counts proofs',
+      diet: 'vegan',
+      contact: 'nostr:npub1…',
+      event: SMALL.eventTag,
+    }),
+    params: SMALL,
+    status: 'accepted',
+    createdAt: 1001,
+    tags: buildTags({ params: SMALL, status: 'accepted' }),
+  });
+  const top = await mineNonce({ template: detailsTemplate, targetBits: declaredBits, batch: 64 });
+  const details = signWithSecretKey({ ...detailsTemplate, tags: top.tags }, mined.secretKey);
+
+  const dv = verifyRsvp(details, SMALL);
+  assert.equal(dv.ok, true, dv.reason);
+  assert.equal(details.pubkey, proof.pubkey, 'same mined key');
+  assert.equal(dv.bits, verifyRsvp(proof, SMALL).bits, 'both sit on the same rung');
+  assert.notEqual(details.id, proof.id, 'a distinct event');
+
+  for (const [label, order] of [['proof first', [proof, details]], ['details first', [details, proof]]]) {
+    const r = resolve(order, SMALL);
+    assert.equal(r.seatsUsed, 1, `${label}: one seat per pubkey, not two`);
+    assert.equal(r.acceptedUnvetted.length, 1);
+    assert.equal(r.acceptedCount, 1);
+    assert.equal(r.accepted.length, 1);
+    assert.equal(r.nextRequiredBits, 5, `${label}: the follow-up does not move the rung`);
+    assert.ok(
+      r.rejected.some((x) => x.reason === REASONS.DUPLICATE_PUBKEY),
+      `${label}: the second event is reported as a duplicate pubkey`,
+    );
+  }
+  assert.equal(resolve([proof, details], SMALL).acceptedCount, alone.acceptedCount, 'seat count unchanged');
+});
+
+test('flow v2: the auto-publish guard fires once, only at or above the CURRENT rung, never downhill', () => {
+  assert.equal(shouldAutoPublishProof({ published: false, difficulty: 16, rung: 16 }), true);
+  assert.equal(shouldAutoPublishProof({ published: false, difficulty: 20, rung: 16 }), true, 'above the rung is fine');
+  assert.equal(shouldAutoPublishProof({ published: false, difficulty: 15, rung: 16 }), false, 'never publish below the rung');
+  assert.equal(shouldAutoPublishProof({ published: true, difficulty: 20, rung: 16 }), false, 'once per page load');
+  assert.equal(shouldAutoPublishProof({ published: false, difficulty: 16, rung: null }), false, 'ladder full');
+  assert.equal(shouldAutoPublishProof({ published: false, difficulty: 16, rung: 16, settled: false }), false, 'relay picture still moving');
+  assert.equal(shouldAutoPublishProof({ published: false, difficulty: 16, rung: 16, settled: true }), true);
 });

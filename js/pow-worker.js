@@ -15,6 +15,7 @@
  *   {type:'mined', pubkey, npub, vanityChars, vanityBits, nonce, declaredBits, actualBits,
  *                  difficulty, targetBits, template, tries, elapsedMs}
  *   {type:'signed', event, signature}
+ *   {type:'proof', event, nonce, declaredBits, actualBits, rung, content, tags, tries, elapsedMs}
  *   {type:'exported', secretKey, nsec}
  *   {type:'error', message, context}
  *
@@ -30,6 +31,7 @@ import {
   buildEventTemplate,
   buildTags,
   mineNonce,
+  mineProofEvent,
   mineVanityKey,
   randomSeed,
   scanLowEntropyWindows,
@@ -185,6 +187,49 @@ self.onmessage = async (ev) => {
         state.targetBits = next;
         await mineTop(state.content, state.targetBits);
         postMined();
+        break;
+      }
+
+      case 'proof': {
+        // Flow v2: the unattended MINIMAL PROOF event. Same mined key and the
+        // same rung top-up as a real RSVP, but the content is machine-generated
+        // (bits / nonce / npub prefix) and carries nothing personal. The id —
+        // hence the nonce bits we have to find — depends on the content and the
+        // pubkey, so content, tags and id are ground together here rather than
+        // reusing the placeholder top-up.
+        if (!state.key) throw new Error('nothing mined yet');
+        if (!state.key.secretKey) throw new Error('the proof event needs the mined key');
+        const rung = Number.isFinite(msg.targetBits) ? msg.targetBits : state.targetBits;
+        state.targetBits = rung;
+        state.status = msg.status ?? 'accepted';
+        const info = vanityInfo(state.key.pubkey, state.params);
+        const proof = await mineProofEvent({
+          pubkey: state.key.pubkey,
+          secretKey: state.key.secretKey,
+          params: state.params,
+          targetBits: Math.max(0, rung - info.bits),
+          npubPrefix: `npub1${info.matched}`,
+          status: state.status,
+          createdAt: state.createdAt,
+          batch: NONCE_BATCH,
+          onProgress: (p) => postProgress(p, 'proof', state.gen),
+          shouldStop: () => false,
+        });
+        if (!proof) throw new Error('proof grind cancelled');
+        post({
+          type: 'proof',
+          event: proof.event,
+          id: proof.event.id,
+          nonce: proof.nonce,
+          declaredBits: proof.declaredBits,
+          actualBits: proof.actualBits,
+          rung,
+          targetBits: rung,
+          content: proof.content,
+          tags: proof.tags,
+          tries: proof.tries,
+          elapsedMs: proof.elapsedMs,
+        });
         break;
       }
 

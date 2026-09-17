@@ -20,6 +20,38 @@ difficulty ladder.
 The miner, the verifier, the org collection script and the tests all share one
 module: `js/pow-ratchet.js`.
 
+### Flow v2 — the RSVP button, and the unattended proof event
+
+The CTA is labelled **RSVP** and the grind starts on page load, with no click needed.
+
+1. **Mining runs from load.** Nothing to press: the workers grind the leet prefix
+   and the raindrop window on every core, and keep topping the nonce up to the
+   current rung (`requiredBits()` — each seat is ≈2× the previous person's work).
+2. **The moment the key clears the current rung, the page publishes a `kind 1337`
+   PROOF event by itself.** No click, no form, no consent checkbox — because it
+   carries nothing personal. The content is machine-generated only
+   (`{"v":2,"proof":1,"event":…,"bits":…,"nonce":…,"npub":…}`, where `npub` is the
+   mined *prefix*), and the tags are exactly the programmatic ones a valid RSVP
+   gets (`t`, the event marker, `status`, `client`, `nonce`) — no name, alias,
+   intent, contact or user agent, ever.
+   Publishing is **once per page load** and **monotone**: it fires only when
+   `vanityBits + nonceBits >= requiredBits(seats)` and never below the rung
+   (see `shouldAutoPublishProof()`), and the status line then shows the event id
+   as a njump link.
+3. **Only after that does the details form appear** — name/alias/intent/skill/
+   idea/diet/contact plus the consent checkbox, which applies to *this* event,
+   the one with personal fields. There is no need to fill it in: the proof event
+   already holds the seat.
+4. **The details event reuses the mined key at the same rung**, so `resolve()`
+   (which dedupes seats by pubkey through `betterOf()`) counts it as the *same*
+   seat — it never consumes a second one. `test/pow-ratchet.test.mjs` asserts
+   that with a real follow-up event, in both arrival orders.
+5. **The nsec handover is revealed with the form**, before any submission, so a
+   visitor who never fills the form still leaves with their key. Importing the
+   nsec into a NIP-07 signer (nos2x, Alby, nostore) keeps the identical identity.
+
+The live seat counter (`#counter-seats`) stays on screen throughout.
+
 ## Publishing as an nsite
 
 ```bash

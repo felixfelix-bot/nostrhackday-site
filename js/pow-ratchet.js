@@ -801,6 +801,188 @@ export async function mineNonce({
   }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Flow v2 — the unattended MINIMAL PROOF event
+//
+// The instant the freshly mined key clears the CURRENT ladder rung the page
+// publishes ONE event that carries no personal fields at all: no name, alias,
+// intent, skill, idea, diet or contact — only machine-generated proof text
+// (nonce bits / nonce / mined npub prefix) and the programmatic tags that every
+// valid RSVP gets. The details form (the only event with personal fields, and
+// with the consent checkbox) is revealed afterwards, and its follow-up reuses
+// the same key and the same rung top-up, so it lands on the SAME ladder seat:
+// resolve() dedupes by pubkey through betterOf().
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Version of the machine proof content (bumped if its shape ever changes). */
+export const PROOF_VERSION = 2;
+
+/** Status tag carried by the unattended proof event. */
+export const PROOF_STATUS = 'accepted';
+
+/**
+ * The proof content, as head/tail around the bare nonce digits. Building the
+ * grind from the SAME head/tail as the pure builder is what makes the ground
+ * id and the published content impossible to drift apart.
+ */
+function proofContentHeadTail({ bits = 0, npubPrefix = '', params = DEFAULT_PARAMS } = {}) {
+  const declared = Math.max(0, Math.floor(Number(bits) || 0));
+  const head = `{"v":${PROOF_VERSION},"proof":1,"event":${JSON.stringify(params.eventTag)},"bits":${declared},"nonce":"`;
+  const tail = `","npub":${JSON.stringify(String(npubPrefix ?? ''))}}`;
+  return { head, tail, declared };
+}
+
+/**
+ * Machine-generated proof text — deliberately tiny and impersonal:
+ *   v     — proof-content version
+ *   proof — 1: this is a mining proof, not a human RSVP
+ *   event — the event marker (2026-09-29-berlin); markers stay in tags, nowhere else
+ *   bits  — nonce bits committed to (same value as the nonce tag's 3rd entry)
+ *   nonce — the ground nonce (same value as the nonce tag's 2nd entry)
+ *   npub  — the MINED PREFIX only (`npub1` + the leet chars); the full npub
+ *           never appears in the content
+ */
+export function buildProofContent({ bits = 0, nonce = 0, npubPrefix = '', params = DEFAULT_PARAMS } = {}) {
+  const { head, tail } = proofContentHeadTail({ bits, npubPrefix, params });
+  const n = String(nonce);
+  if (!/^\d+$/.test(n)) throw new TypeError(`buildProofContent: nonce must be a counter, got ${JSON.stringify(nonce)}`);
+  return `${head}${n}${tail}`;
+}
+
+/**
+ * The exact tag set of a v2 proof event: the programmatic tags (kind marker,
+ * event marker, status, client) plus the nonce tag. No personal tags, ever.
+ */
+export function buildProofTags({ params = DEFAULT_PARAMS, nonce = 0, bits = 0, status = PROOF_STATUS } = {}) {
+  const declared = Math.max(0, Math.floor(Number(bits) || 0));
+  return buildTags({ params, status, extraTags: [['nonce', String(nonce), String(declared)]] });
+}
+
+/** Pure builder: (pubkey, nonce, bits, mined npub prefix) → the exact proof event. */
+export function buildProofEvent({
+  pubkey,
+  nonce = 0,
+  bits = 0,
+  npubPrefix = '',
+  params = DEFAULT_PARAMS,
+  status = PROOF_STATUS,
+  createdAt = Math.floor(Date.now() / 1000),
+} = {}) {
+  return buildEventTemplate({
+    pubkey,
+    content: buildProofContent({ bits, nonce, npubPrefix, params }),
+    params,
+    status,
+    createdAt,
+    tags: buildProofTags({ params, nonce, bits, status }),
+  });
+}
+
+/**
+ * The auto-publish guard. Publishing is one-shot per page load and strictly
+ * monotone: `published` latches it (so a top-up that raises difficulty later
+ * can never re-publish, and nothing can ever be published downhill), and the
+ * rung check means a key that has not cleared the CURRENT rung is not published
+ * at all.
+ *
+ *   published  — a proof already went out (or is in flight) this page load
+ *   difficulty — vanityBits(pubkey) + declared nonce bits, from the mined key
+ *   rung       — requiredBits(k) for the current seat count (null = ladder full)
+ *   settled    — the relay REQ picture settled, so `rung` is the real rung
+ */
+export function shouldAutoPublishProof({ published = false, difficulty = 0, rung = null, settled = true } = {}) {
+  if (published) return false;
+  if (!settled) return false;
+  if (rung === null || rung === undefined || !Number.isFinite(Number(rung))) return false;
+  return Number(difficulty) >= Number(rung);
+}
+
+/**
+ * Grind the joint (vanity + nonce) proof and sign it. A key is only ever mined
+ * once and the id — hence the nonce bits still needed for the rung — depends on
+ * the pubkey, so content, tags and id are ground together here and then signed
+ * with the ephemeral key.
+ *
+ * `npubPrefix` must be the mined prefix (`npub1` + vanityInfo().matched).
+ * Returns null only when `shouldStop` cancelled the grind.
+ */
+export async function mineProofEvent({
+  pubkey,
+  secretKey = null,
+  params = DEFAULT_PARAMS,
+  targetBits = 0,
+  npubPrefix = '',
+  status = PROOF_STATUS,
+  createdAt = Math.floor(Date.now() / 1000),
+  startNonce = 0,
+  batch = 64,
+  onProgress,
+  shouldStop,
+} = {}) {
+  const startedAt = Date.now();
+  const target = Math.max(0, Math.floor(Number(targetBits) || 0));
+  const { head, tail } = proofContentHeadTail({ bits: target, npubPrefix, params });
+  const tags = buildProofTags({ params, nonce: 0, bits: target, status });
+  const nonceRef = tags[tags.length - 1];
+  let counter = startNonce;
+  let seen = 0;
+
+  const attempt = () => {
+    const content = `${head}${counter}${tail}`;
+    nonceRef[1] = String(counter);
+    const id = computeEventId({ pubkey, created_at: createdAt, kind: params.kind, tags, content });
+    counter += 1;
+    seen += 1;
+    return leadingZeroBits(id) >= target ? id : null;
+  };
+
+  const finish = (id) => {
+    const nonce = String(counter - 1);
+    // Rebuild through the pure builder so the published event and the builder
+    // cannot drift; the ids must agree or the grind was not what we publish.
+    const template = buildProofEvent({ pubkey, nonce, bits: target, npubPrefix, params, status, createdAt });
+    const rebuiltId = computeEventId(template);
+    if (rebuiltId !== id) throw new Error(`mineProofEvent: builder drift (${rebuiltId} !== ${id})`);
+    const event = secretKey ? finalizeEvent(template, secretKey) : template;
+    return {
+      id,
+      nonce,
+      declaredBits: target,
+      actualBits: leadingZeroBits(id),
+      content: template.content,
+      tags: template.tags,
+      template,
+      event,
+      tries: seen,
+      elapsedMs: Date.now() - startedAt,
+    };
+  };
+
+  if (target === 0) {
+    const id = attempt();
+    return finish(id);
+  }
+
+  for (;;) {
+    for (let i = 0; i < batch; i += 1) {
+      const id = attempt();
+      if (id) return finish(id);
+    }
+    if (onProgress) {
+      const elapsedMs = Date.now() - startedAt;
+      onProgress({
+        phase: 'proof',
+        tries: seen,
+        targetBits: target,
+        elapsedMs,
+        hashesPerSecond: elapsedMs > 0 ? Math.round((seen / elapsedMs) * 1000) : 0,
+      });
+    }
+    if (shouldStop?.()) return null;
+    await sleep(0);
+  }
+}
+
 /** Sign a mined template with a raw secret key (ephemeral path). */
 export function signWithSecretKey(template, secretKey) {
   return finalizeEvent(template, secretKey);
