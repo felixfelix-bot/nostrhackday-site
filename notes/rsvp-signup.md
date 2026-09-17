@@ -113,21 +113,23 @@ ladder regardless of what the page believes.
 `window.__nhd` exposes the live page state (`phase`, `npub`, `bits`,
 `nextRequiredBits`, `accepted`, `published`, `signed`) for the same reason.
 
-## the grid is a state, the attempt log is a log
+## the panel has no fingerprint grid (pulled 2026-09-17)
 
-`#grind`'s identity grid shows the **closest candidate so far** — the `best`
-candidate `mineVanityKey()` reports with every progress tick — with the leading
-columns that spell the target marked green. It is monotonic: a newer, weaker
-attempt can never replace it. The newest raw attempts only reach the attempt log
-underneath, and only when they matched at least one character (a firehose of
-misses read as "the key being mined is not the one I asked for").
+The 2D character grid and the rolling log of raw attempts are **gone** — operator
+call: "too complicated and it needs to be explained properly in a demo". They
+live in the `asymmetric-vanity-npubs` demo, not on the RSVP page.
 
-After `found` the grid is **the mined key, frozen**: `viz.push()` stops painting,
-the frame that was already scheduled is cancelled, and `setFound()` claims the
-best slot — so a worker message still in flight cannot overwrite the npub whose
-nsec the visitor keeps. Verified on the shipped ladder by
-`~/worktrees/nostrhackday-e2e/run-e.mjs` (`?relays=` empties the relay list, so
-the grind is real but nothing is published).
+What is left is the part that can be explained in one breath: the "mining toward
+…" strip (green = matched, from `DEFAULT_PARAMS.vanityTarget`, never from
+markup), the progress bar directly under it, the live stats, and — once the key
+exists — the mined npub with its green/orange zones, the raindrop ring/badge and
+the nsec handover. `viz.push(sample, best)` now only advances the strip, on the
+monotonic best candidate `mineVanityKey()` reports.
+
+Verified on the shipped ladder (nothing published — `?relays=` empties the relay
+list) by `~/worktrees/nostrhackday-e2e/run-e.mjs`: strip 0 → 2 → 3 onto `n05…`,
+bar to 100%, zero grid nodes in the DOM in every state, headline = mined npub,
+nsec shown without a click.
 
 ## known relay notes (probed 2026-09-16)
 

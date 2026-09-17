@@ -319,39 +319,6 @@ a {
     color: var(--nhd-orange);
 }
 
-.grind-strip {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-    display: grid;
-    gap: 0.1rem;
-    max-height: 15rem;
-    overflow: hidden;
-}
-
-.npub-row {
-    display: flex;
-    gap: var(--spacing-sm);
-    align-items: baseline;
-    font-size: 0.78rem;
-    opacity: 0.7;
-    animation: nhd-slide 0.25s ease-out;
-}
-
-.npub-row-hit {
-    opacity: 1;
-}
-
-.npub-row .npub {
-    font-size: 0.78rem;
-}
-
-.npub-score {
-    margin-left: auto;
-    color: var(--nhd-green);
-    font-family: var(--nhd-mono);
-}
-
 .grind-legend {
     font-size: 0.85rem;
     font-weight: 500;
@@ -368,19 +335,6 @@ a {
     height: 0.7rem;
     display: inline-block;
     border-radius: 2px;
-}
-
-/* the leading columns that spell the target: the grid is the SAME key the target
-   strip is filling in, so the matched columns are marked here too */
-.fingerprint-grid .cell-matched {
-    outline: 2px solid var(--nhd-green);
-    outline-offset: -2px;
-}
-
-/* the attempt log: a short, labelled list of the candidates that matched — not
-   a firehose of misses */
-.grind-attempts-label {
-    margin-bottom: 0.25rem;
 }
 
 .legend-vanity {
@@ -673,13 +627,6 @@ button.ghost {
     padding: 0.4rem;
 }
 
-@media (max-width: 40rem) {
-    .npub-row .npub,
-    .npub {
-        font-size: 0.8rem;
-    }
-}
-
 /* ── ONE PAGE: announcement hero + #signup + page footer ────────────────── */
 
 body.onepage {
@@ -855,92 +802,9 @@ body.onepage .card {
     line-height: 1.6;
 }
 
-/* ── live fingerprint grid (ported from asymmetric-vanity-npubs demo) ──── */
-
-.grind-grid {
-    display: grid;
-    gap: var(--spacing-xs);
-}
-
-.grind-grid-label {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--spacing-sm);
-    align-items: baseline;
-    font-size: 0.78rem;
-    font-weight: 500;
-    letter-spacing: 0.04em;
-}
-
-.grind-grid-caption {
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    color: #9a9a9a;
-}
-
-.grind-grid-candidate {
-    font-size: 0.8rem;
-    color: #b9b9b9;
-}
-
-.fingerprint-grid-host {
-    overflow-x: auto;
-}
-
-.fingerprint-grid {
-    display: inline-grid;
-    gap: 3px;
-    padding: 12px;
-    background: #111;
-    border: 1px solid var(--color-border);
-    border-radius: 8px;
-    margin: 8px 0;
-}
-
-.fingerprint-grid .cell {
-    width: 40px;
-    height: 40px;
-    border-radius: 6px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-family: var(--nhd-mono);
-    font-size: 16px;
-    font-weight: bold;
-    color: rgba(0, 0, 0, 0.7);
-    animation: cellAppear 0.4s ease-out both;
-    transition: background-color 0.15s linear, color 0.15s linear, box-shadow 0.15s linear;
-}
-
-.fingerprint-grid .cell:hover {
-    transform: scale(1.15);
-    z-index: 5;
-}
-
-.fingerprint-grid .cell-empty {
-    background: var(--color-border);
-    opacity: 0.3;
-}
-
 @keyframes cellAppear {
     from { opacity: 0; transform: scale(0.3) rotate(-30deg); }
     to   { opacity: 1; transform: scale(1) rotate(0); }
-}
-
-.fingerprint-grid-host-found .fingerprint-grid {
-    border-color: var(--nhd-green);
-    box-shadow: 0 0 1rem rgba(63, 185, 80, 0.35);
-}
-
-@media (max-width: 40rem) {
-    .fingerprint-grid .cell {
-        width: 30px;
-        height: 30px;
-        font-size: 13px;
-    }
-    .fingerprint-grid {
-        padding: 8px;
-    }
 }
 
 /* the mining counters are the headline numbers: make them loud */
@@ -955,11 +819,6 @@ body.onepage .card {
     font-weight: 700;
 }
 
-.legend-grid {
-    background: linear-gradient(90deg, hsl(30, 60%, 48%), hsl(200, 72%, 62%), hsl(120, 84%, 48%));
-    border: 1px solid var(--color-border);
-}
-
 .legend-window {
     background: transparent;
     border: 1px solid var(--nhd-green);
@@ -967,38 +826,10 @@ body.onepage .card {
     box-shadow: 0 0 6px rgba(63, 185, 80, 0.45);
 }
 
-/* ── the raindrop in the 2D grid: which cells are inside the window ────── */
-
-.fingerprint-grid .cell-in-window {
-    outline: 2px solid var(--nhd-green);
-    outline-offset: 1px;
-    z-index: 2;
-}
-
-/* mark the ring, not the cell colour: a dim non-matching cell must stay legible */
-.fingerprint-grid .cell-in-window::after {
-    content: attr(data-window-pos);
-    position: absolute;
-    top: -6px;
-    right: -6px;
-    font-size: 9px;
-    line-height: 1;
-    color: var(--nhd-green);
-    background: #111;
-    border-radius: 3px;
-    padding: 1px 2px;
-}
-
-.fingerprint-grid .cell {
-    position: relative;
-}
-
 /* ── reduced motion for the in-page animations ─────────────────────────── */
 
 @media (prefers-reduced-motion: reduce) {
-    .fingerprint-grid .cell,
     .grind-dot,
-    .npub-row,
     .npub-window,
     .target-char,
     .raindrop-badge {
@@ -1009,8 +840,7 @@ body.onepage .card {
 
 /* a soft breath on the raindrop ring, only when motion is welcome */
 @media (prefers-reduced-motion: no-preference) {
-    .npub-window,
-    .fingerprint-grid .cell-in-window {
+    .npub-window {
         animation: raindropPulse 2.6s ease-in-out infinite;
     }
 }
