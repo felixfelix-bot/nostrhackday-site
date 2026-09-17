@@ -69,9 +69,14 @@ test('the panel invites before the click and narrates after it', () => {
     'the running title must not be the served default — it appears only after the click',
   );
   assert.equal(
-    count(vizJs, "'Mine your RSVP'"),
-    2,
-    'js/viz.js starts in the inviting state (initial render + reset)',
+    count(vizJs, "el('span', 'grind-title', 'Mine your RSVP')"),
+    1,
+    'js/viz.js must render the inviting title first',
+  );
+  assert.equal(
+    count(vizJs, "setTitle('Mine your RSVP')"),
+    1,
+    'js/viz.js must return to the inviting title on reset',
   );
   // the two states live in ONE place (setPanelTitle in js/signup.js): the viz
   // takes the text it is handed, so there is a single source for the pair.
