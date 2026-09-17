@@ -706,6 +706,19 @@ body.onepage .card {
     outline-offset: 3px;
 }
 
+/* After the press the CTA reflects state: the grind is running and the button is
+   spent, so a second press cannot spawn a second worker set (ADDENDUM 2). */
+.cta-mine[data-state='mining'],
+.cta-mine[aria-disabled='true'] {
+    cursor: default;
+    pointer-events: none;
+    animation: none;
+    background: linear-gradient(135deg, #6f6252, #554b40);
+    border-color: #6f6252;
+    box-shadow: none;
+    color: #e8e2d8;
+}
+
 @keyframes cta-glow {
     0%, 100% { box-shadow: 0 0 0.4rem rgba(247, 147, 26, 0.55), 0 0 1rem rgba(247, 147, 26, 0.25); }
     50% { box-shadow: 0 0 1rem rgba(247, 147, 26, 0.95), 0 0 2.2rem rgba(247, 147, 26, 0.45); }

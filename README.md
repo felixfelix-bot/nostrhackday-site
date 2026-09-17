@@ -22,16 +22,26 @@ module: `js/pow-ratchet.js`.
 
 ### Flow v2 — the RSVP button, and the unattended proof event
 
-The CTA is labelled **RSVP** and the grind starts on page load, with no click needed.
+The CTA is labelled **RSVP**, and it is a real gate: the grind starts when it is
+*pressed*, never on page load. A page load is not an RSVP — and a proof event
+takes a seat on the ladder, where each seat is ≈2× the previous person's work —
+so nothing mines, and therefore nothing can be published, until someone puts
+their hand up. The predicate is `canStartMining({ started, intent })` in
+`js/pow-ratchet.js` (pure, unit-tested); the wiring latches `started` on the
+first press, flips the CTA to `mining…` and spends it, so a second press cannot
+spawn a second worker set.
 
-1. **Mining runs from load.** Nothing to press: the workers grind the leet prefix
-   and the raindrop window on every core, and keep topping the nonce up to the
-   current rung (`requiredBits()` — each seat is ≈2× the previous person's work).
+1. **Press RSVP to start the grind.** Until then the panel is idle (`press RSVP
+   to start mining your npub`) and nothing is mined. After the press the workers
+   grind the leet prefix and the raindrop window on every core, and keep topping
+   the nonce up to the current rung (`requiredBits()` — each seat is ≈2× the
+   previous person's work).
 2. **The moment the key clears the current rung, the page publishes a `kind 1337`
    PROOF event by itself.** No click, no form, no consent checkbox — because it
    carries nothing personal. The content is machine-generated only
-   (`{"v":2,"proof":1,"event":…,"bits":…,"nonce":…,"npub":…}`, where `npub` is the
-   mined *prefix*), and the tags are exactly the programmatic ones a valid RSVP
+   (`{"v":2,"proof":1,"event":…,"bits":…,"nonce":…,"npub":…}`, where `npub` is
+   the mined *prefix*), and the tags
+   are exactly the programmatic ones a valid RSVP
    gets (`t`, the event marker, `status`, `client`, `nonce`) — no name, alias,
    intent, contact or user agent, ever.
    Publishing is **once per page load** and **monotone**: it fires only when

@@ -28,6 +28,7 @@ import {
   DEFAULT_PARAMS,
   PROOF_STATUS,
   buildTags,
+  canStartMining,
   describeRsvp,
   lowEntropyLabel,
   requiredBits,
@@ -75,6 +76,15 @@ const state = {
   phase: 'loading',
   error: null,
   mined: null,
+  /**
+   * ADDENDUM 2 — the intent gate. Nothing grinds, and therefore nothing can be
+   * auto-published, until the visitor presses RSVP: a proof event takes a seat on
+   * the ladder and ratchets the difficulty, so a drive-by page load must not mine.
+   * `started` latches on the first press, which is what stops a double press from
+   * spawning a second worker set.
+   */
+  started: false,
+  intent: false,
   progress: { vanityTries: 0, nonceTries: 0, keysPerSecond: 0, hashesPerSecond: 0, workers: {}, startedAt: Date.now() },
   accepted: [],
   acceptedUnvetted: [],
@@ -135,7 +145,7 @@ function setupCounter() {
   // first event or by a short settle timer, whichever happens first.
   setTimeout(() => {
     state.eose = true;
-    setStatus('live', `live — watching ${RELAYS.length} relays`);
+    setLiveStatus(`live — watching ${RELAYS.length} relays`);
     // the rung is real now (the seat count is in): a key that clears it may publish
     maybeAutoPublishProof();
   }, 4000);
@@ -148,7 +158,7 @@ function setupCounter() {
         state.relayEvents += 1;
         if (!state.eose) {
           state.eose = true;
-          setStatus('live', `live — ${state.relayEvents} event(s) from ${RELAYS.length} relays`);
+          setLiveStatus(`live — ${state.relayEvents} event(s) from ${RELAYS.length} relays`);
         }
         store.add(value); // verified by EventStore before it lands
       },
@@ -263,6 +273,61 @@ function renderRelayChip(url, cls) {
 }
 
 // ── mining ───────────────────────────────────────────────────────────────────
+
+/**
+ * ADDENDUM 2 — relay chatter may only take over the status line once the visitor
+ * has pressed RSVP; until then the idle prompt owns it.
+ */
+function setLiveStatus(text) {
+  if (!state.started) return;
+  setStatus('live', text);
+}
+
+/**
+ * THE INTENT GATE — the one and only way the grind starts.
+ *
+ * Called from the RSVP button's click handler (and, headlessly, from the
+ * selftest), never from page load. `canStartMining()` is the pure predicate and
+ * the latch lives here, so a second press returns false and cannot spawn a
+ * second worker set.
+ */
+function startMiningFromIntent() {
+  if (!canStartMining({ started: state.started, intent: state.intent })) return false;
+  state.started = true;
+  renderStartState();
+  startWorkers();
+  return true;
+}
+
+/**
+ * The RSVP button: press => intent => grind, then show the mining panel. The
+ * panel (not the button) is where the visitor watches and later hands over keys.
+ */
+function onRsvpPress(ev) {
+  ev?.preventDefault?.();
+  state.intent = true;
+  const started = startMiningFromIntent();
+  // move the visitor to the panel they just started
+  $('signup')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  $('mining')?.focus({ preventScroll: true });
+  return started;
+}
+
+/**
+ * After the press the CTA reflects state, so a second click cannot start a
+ * second grind: the href is gone (no second navigation), the label says what is
+ * happening and aria-disabled keeps the intent legible to ATs.
+ */
+function renderStartState() {
+  if (!state.started) return;
+  const cta = $('cta-mine');
+  if (!cta) return;
+  const arrow = cta.querySelector('.cta-arrow');
+  cta.replaceChildren('mining… ', ...(arrow ? [arrow] : []));
+  cta.dataset.state = 'mining';
+  cta.removeAttribute('href');
+  cta.setAttribute('aria-disabled', 'true');
+}
 
 function startWorkers() {
   const hw = Math.max(1, Math.min(MAX_WORKERS, navigator.hardwareConcurrency || 2));
@@ -770,6 +835,8 @@ function initForm() {
     ev.preventDefault();
     submit();
   });
+  // ADDENDUM 2: the RSVP button is the gate — the ONLY thing that starts the grind.
+  $('cta-mine')?.addEventListener('click', onRsvpPress);
   $('nip07-toggle').addEventListener('change', (ev) => {
     state.useNip07 = ev.target.checked;
   });
@@ -791,9 +858,14 @@ document.addEventListener('DOMContentLoaded', () => {
   initForm();
   setupCounter();
   detectNip07();
-  startWorkers();
+  // ADDENDUM 2: NO worker start at load any more. A page load is not an RSVP —
+  // the grind (and therefore the auto-published proof) waits for the RSVP button.
+  setStatus('idle', 'press RSVP to start mining your npub');
 
   if (SELFTEST) {
+    // ADDENDUM 2: the gate applies to the selftest too, so it walks the visitor's
+    // path exactly — it PRESSES the button rather than starting the grind itself.
+    $('cta-mine')?.click();
     // Flow v2 order: the page publishes the unattended PROOF event by itself and
     // only then do we autofill + submit the details event, so the selftest walks
     // exactly the path a visitor walks.
@@ -820,6 +892,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
 window.__nhd = {
   get phase() { return state.phase; },
+  /** ADDENDUM 2 — the intent gate: false until the RSVP button is pressed */
+  get started() { return state.started; },
+  get intent() { return state.intent; },
+  /** drive the gate the way the button does (idempotent: a second call is a no-op) */
+  start: () => {
+    state.intent = true;
+    return startMiningFromIntent();
+  },
+  pressRsvp: () => $('cta-mine')?.click() ?? false,
   get error() { return state.error; },
   get npub() { return state.mined?.npub ?? null; },
   get bits() { return state.mined ? state.mined.vanityBits + state.mined.declaredBits : null; },

@@ -14,6 +14,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 
 import {
   BECH32_CHARSET,
@@ -25,6 +26,7 @@ import {
   buildProofEvent,
   buildProofTags,
   buildTags,
+  canStartMining,
   computeEventId,
   deriveCandidate,
   difficultyOf,
@@ -873,4 +875,59 @@ test('flow v2: the auto-publish guard fires once, only at or above the CURRENT r
   assert.equal(shouldAutoPublishProof({ published: false, difficulty: 16, rung: null }), false, 'ladder full');
   assert.equal(shouldAutoPublishProof({ published: false, difficulty: 16, rung: 16, settled: false }), false, 'relay picture still moving');
   assert.equal(shouldAutoPublishProof({ published: false, difficulty: 16, rung: 16, settled: true }), true);
+});
+
+// ── 7. the INTENT GATE: the grind starts on an RSVP press, never on page load ─
+//
+// ADDENDUM 2: a proof event consumes a ladder seat and ratchets the difficulty
+// ~2x, so a drive-by page load must not mine. Nothing grinds until the visitor
+// presses the RSVP button; the pure predicate below is what the wiring calls,
+// and it is also what makes the start idempotent (one press => one worker set).
+
+test('gate: canStartMining() starts the grind only on a fresh, explicit intent', () => {
+  // ── no press, no grind ───────────────────────────────────────────────────
+  assert.equal(canStartMining(), false, 'the defaults are idle');
+  assert.equal(canStartMining({}), false, 'page load must not start the grind');
+  assert.equal(canStartMining({ started: false, intent: false }), false);
+  assert.equal(canStartMining({ started: false, intent: undefined }), false);
+  assert.equal(canStartMining({ started: false, intent: null }), false);
+  assert.equal(canStartMining({ started: false, intent: 0 }), false, 'a falsy intent is not a press');
+  assert.equal(canStartMining({ started: false, intent: '' }), false);
+
+  // ── a real press starts it ───────────────────────────────────────────────
+  assert.equal(canStartMining({ intent: true }), true, 'a fresh intent starts the grind');
+  assert.equal(canStartMining({ started: false, intent: true }), true);
+
+  // ── and only once: a second press cannot spawn a second worker set ────────
+  assert.equal(canStartMining({ started: true, intent: true }), false, 'already started');
+  assert.equal(canStartMining({ started: true, intent: false }), false);
+
+  // ── pure and side-effect free: same argument, same answer, no state ───────
+  const fresh = Object.freeze({ started: false, intent: true });
+  assert.equal(canStartMining(fresh), true);
+  assert.equal(canStartMining(fresh), true, 'twice in a row with the same input');
+  assert.deepEqual(canStartMining(fresh), true);
+  // an unstarted, unintended page load asked again is STILL idle (nothing latched)
+  assert.equal(canStartMining({ started: false, intent: false }), false);
+});
+
+test('gate: the wiring exists and page load no longer calls startWorkers()', () => {
+  // js/signup.js is a browser module (it imports vendor ESM that touches the DOM
+  // lazily), so this asserts on its SOURCE: the gate must be wired, the
+  // load-time autostart must be gone, and SELFTEST must press the button.
+  const src = readFileSync(new URL('../js/signup.js', import.meta.url), 'utf8');
+
+  assert.match(src, /canStartMining\s*\(/, 'the wiring calls the pure predicate');
+  assert.match(src, /get started\(\)/, 'the gate is exposed on the QA surface');
+  assert.match(src, /startMiningFromIntent/, 'there is a single start entry point');
+
+  // the DOMContentLoaded handler must not contain a bare startWorkers() call
+  const handler = src.slice(src.indexOf("addEventListener('DOMContentLoaded'"));
+  const body = handler.slice(0, handler.indexOf('\n});'));
+  assert.ok(body.length > 0, 'the DOMContentLoaded handler was found');
+  assert.ok(!/startWorkers\s*\(/.test(body), 'the grind is NOT started at load any more');
+  assert.match(body, /cta-mine/, 'SELFTEST drives the gate through the RSVP button');
+
+  // the button is the only entry point, and it lives outside that handler
+  assert.match(src, /cta-mine/, 'js/signup.js looks the RSVP button up');
 });

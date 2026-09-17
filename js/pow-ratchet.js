@@ -898,6 +898,27 @@ export function shouldAutoPublishProof({ published = false, difficulty = 0, rung
 }
 
 /**
+ * The INTENT GATE (ADDENDUM 2) — may the grind start right now?
+ *
+ * A proof event consumes a seat on the ladder and ratchets the required
+ * difficulty, so a drive-by page load (someone who will never show up) must not
+ * mine one. The grind therefore starts on exactly one thing: a press of the
+ * RSVP button. This predicate is pure and side-effect free — no clock, no DOM,
+ * no module state — so the wiring owns the latch:
+ *
+ *   started — the grind already began this page load (idempotent start: a second
+ *             press must not spawn a second worker set)
+ *   intent  — the visitor pressed RSVP
+ *
+ * Usage in the wiring:
+ *   if (canStartMining({ started: state.started, intent: state.intent })) …
+ */
+export function canStartMining({ started = false, intent = false } = {}) {
+  if (started) return false;
+  return intent === true;
+}
+
+/**
  * Grind the joint (vanity + nonce) proof and sign it. A key is only ever mined
  * once and the id — hence the nonce bits still needed for the rung — depends on
  * the pubkey, so content, tags and id are ground together here and then signed

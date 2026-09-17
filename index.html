@@ -64,12 +64,15 @@
 
     <!-- ── everything below is the RSVP: form + live mining ─────────────── -->
     <section class="signup-body" id="signup">
-        <!-- ── the grinding ─────────────────────────────────────────────── -->
-        <section class="panel mine-panel" id="mining">
+        <!-- ── the grinding. IDLE until the RSVP button above is pressed: nothing is
+             mined and nothing is published on a page load (ADDENDUM 2). The panel is
+             focusable so pressing RSVP moves the visitor straight to it. ─────────── -->
+        <section class="panel mine-panel" id="mining" tabindex="-1">
             <h2 class="mine-title">MINING YOUR NPUB <span class="mine-badge">live proof of work</span></h2>
             <p class="mine-lead">
-                Right now your browser is <strong>grinding real nostr keypairs</strong> on every core it
-                can grab, and keeping the one whose <strong>npub spells the leet target</strong>. Every
+                From the moment you press RSVP your browser is <strong>grinding real nostr
+                keypairs</strong> on every core it can grab, and keeping the one whose <strong>npub
+                spells the leet target</strong>. Every
                 matched character is 5 bits of real work: <strong>the mined prefix IS the
                 proof</strong>. The grid below shows the candidate being tried right now — one fixed
                 colour per character. The word's second half cannot be spelled at all, so instead your
@@ -99,7 +102,7 @@
                 <div class="mine-bar" id="mine-bar"></div>
             </div>
             <p class="mine-label muted small" id="mine-label" style="margin-top:0.4rem">starting…</p>
-            <p class="status-line" id="status-line" data-state="idle">booting…</p>
+            <p class="status-line" id="status-line" data-state="idle">Press RSVP to start mining your npub</p>
             <!-- flow v2: the unattended proof event, revealed the moment it is published -->
             <div class="proof-panel" id="proof-panel" hidden>
                 <p class="muted small">
