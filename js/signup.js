@@ -4,10 +4,9 @@
  * Wallet-less, backend-less, build-step-less.
  *
  *  · Identity: an ephemeral key is mined in a Web Worker and never leaves the
- *    browser (it is released to the visitor only if they explicitly ask for it).
- *    If a NIP-07 extension is present AND its npub already clears the visible
- *    leet floor, the visitor may instead sign the identical mined template with
- *    that extension — mining itself is signer-agnostic and happens once either way.
+ *    browser (it is released to the visitor the moment the key exists — losing
+ *    it loses the seat). There is no second signer: the mined key signs both
+ *    events.
  *  · Mining: `pow-ratchet.js` mined once — a visible leet npub prefix (proof of
  *    work a human can check at a glance) plus a NIP-13 nonce top-up that carries
  *    the exact ladder rung. Workers start at page load and only ever top up.
@@ -100,8 +99,6 @@ const state = {
   detailsPublished: false,
   relayEvents: 0,
   eose: false,
-  nip07: null,
-  useNip07: false,
   loadedAt: Date.now(),
 };
 
@@ -387,9 +384,8 @@ function startWorkers() {
             // the other workers are redundant now: the expensive half is done
             for (const w of workers) if (w !== worker) w.terminate();
             // the nsec of that npub exists only inside this worker: ask for it
-            // right away, so the key is on screen the moment the grind stops.
-            // A NIP-07 RSVP has no key of ours to hand over.
-            if (!state.useNip07) worker.postMessage({ type: 'export' });
+            // right away, so the key is on screen the moment the grind stops
+            worker.postMessage({ type: 'export' });
           }
           // authoritative: a retarget top-up sends a refreshed report, so this
           // keeps declaredBits/template in step with the bare rung we can clear
@@ -660,40 +656,6 @@ function validate() {
   return null;
 }
 
-/**
- * NIP-07 path helper: ask the surviving worker to grind the nonce top-up for the
- * extension's pubkey and hand back the mined template (tags included).
- */
-function mineForExtensionKey(content) {
-  return new Promise((resolvePromise) => {
-    if (!winner || !state.nip07) {
-      fail('no mining worker is ready');
-      resolvePromise(null);
-      return;
-    }
-    const onMsg = (ev) => {
-      const msg = ev.data ?? {};
-      if (msg.type === 'mined' && msg.signer === 'nip07') {
-        cleanup();
-        resolvePromise(msg);
-      } else if (msg.type === 'error' && msg.context?.type === 'mineForPubkey') {
-        cleanup();
-        fail(msg.message);
-        resolvePromise(null);
-      }
-    };
-    const cleanup = () => winner.removeEventListener('message', onMsg);
-    winner.addEventListener('message', onMsg);
-    winner.postMessage({
-      type: 'mineForPubkey',
-      pubkey: state.nip07.pubkey,
-      // same rung as the proof: the follow-up must land on the SAME seat
-      targetBits: detailsTargetBits(),
-      content,
-    });
-  });
-}
-
 async function submit() {
   const problem = validate();
   if (problem) {
@@ -705,22 +667,6 @@ async function submit() {
   state.phase = 'signing';
   setStatus('working', 'submitting proof of work…');
   const content = formContent();
-
-  if (state.useNip07 && state.nip07?.clears) {
-    // Extension path: mine the nonce for THEIR pubkey, then let the extension
-    // sign the identical template. Same mined id + tags, different signer.
-    const mined = await mineForExtensionKey(content);
-    if (!mined) return false;
-    state.signed = null;
-    const signed = await window.nostr.signEvent({
-      kind: mined.template.kind,
-      created_at: mined.template.created_at,
-      tags: mined.tags,
-      content: mined.template.content,
-    });
-    await onSigned(signed);
-    return true;
-  }
 
   // the details event reuses the rung the proof cleared (never a fresh seat)
   winner.postMessage({ type: 'sign', content, targetBits: detailsTargetBits() });
@@ -811,41 +757,6 @@ function setStatus(kind, text, link = null) {
   }
 }
 
-// ── NIP-07 detection ─────────────────────────────────────────────────────────
-
-async function detectNip07() {
-  const note = $('nip07-note');
-  if (!window.nostr?.getPublicKey) {
-    note.textContent = 'No NIP-07 extension detected — your ephemeral browser key is used (it never leaves this tab).';
-    return;
-  }
-  try {
-    const pubkey = await window.nostr.getPublicKey();
-    const info = vanityInfo(pubkey, PARAMS);
-    const scan = scanLowEntropyWindows(info.npub, PARAMS);
-    // both halves of the floor: the mined leet prefix AND the raindrop window
-    const clears = info.chars >= PARAMS.vanityChars && scan.found;
-    state.nip07 = { pubkey, npub: info.npub, chars: info.chars, clears, scan };
-    const toggle = $('nip07-toggle');
-    toggle.hidden = false;
-    if (clears) {
-      $('nip07-label').textContent = `Use my NIP-07 key (${info.npub.slice(0, 5 + info.chars)}… clears the floor)`;
-      note.textContent = 'NIP-07 found: your extension key clears the visible floor and carries a raindrop, so you can sign with it.';
-    } else {
-      toggle.disabled = true;
-      $('nip07-label').textContent = 'Use my NIP-07 key (unavailable)';
-      const missing = scan.found
-        ? `matches ${info.chars} of ${PARAMS.vanityChars} leet chars`
-        : `has no ${PARAMS.windowSize}-char window with ≤${PARAMS.maxUnique} distinct chars`;
-      note.textContent =
-        `NIP-07 found, but its npub ${missing} — the floor is a verifiable property, so this RSVP would be ` +
-        'rejected no matter who signs it. Your mined browser key will be used instead.';
-    }
-  } catch (e) {
-    note.textContent = `NIP-07 present but refused getPublicKey (${e?.message ?? e}) — using your ephemeral browser key.`;
-  }
-}
-
 // ── wiring ───────────────────────────────────────────────────────────────────
 
 function initViz() {
@@ -861,9 +772,6 @@ function initForm() {
   });
   // ADDENDUM 2: the RSVP button is the gate — the ONLY thing that starts the grind.
   $('cta-mine')?.addEventListener('click', onRsvpPress);
-  $('nip07-toggle').addEventListener('change', (ev) => {
-    state.useNip07 = ev.target.checked;
-  });
   $('keep-key').addEventListener('click', () => winner?.postMessage({ type: 'export' }));
   $('download-key').addEventListener('click', () => {
     const nsec = $('nsec-out').value;
@@ -881,7 +789,6 @@ document.addEventListener('DOMContentLoaded', () => {
   initViz();
   initForm();
   setupCounter();
-  detectNip07();
   // ADDENDUM 2: NO worker start at load any more. A page load is not an RSVP —
   // the grind (and therefore the auto-published proof) waits for the RSVP button.
   setStatus('idle', 'press RSVP to start mining your npub');

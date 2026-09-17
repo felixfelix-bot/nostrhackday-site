@@ -158,12 +158,6 @@
                         published to public relays. No email, no tracking.
                     </label>
                 </p>
-                <p class="checkbox-row">
-                    <input type="checkbox" id="nip07-toggle" name="nip07" hidden>
-                    <label for="nip07-toggle" id="nip07-label">Use my NIP-07 key</label>
-                </p>
-                <p class="muted small" id="nip07-note">checking for a NIP-07 extension…</p>
-
                 <div class="result-actions">
                     <button type="submit" id="btn-submit">Submit RSVP</button>
                 </div>
@@ -176,8 +170,8 @@
             <p class="muted small">
                 The proof event — and anything you publish above — was signed with a key that lives
                 <strong>only in this tab</strong>. Export it to keep the npub: the proof of work belongs to
-                the key, not to this browser session. Importing the nsec into a NIP-07 signer
-                (nos2x, Alby, nostore) keeps the identical identity everywhere else.
+                the key, not to this browser session. Importing the nsec into any nostr
+                signer keeps the identical identity everywhere else.
             </p>
             <textarea class="nsec-out" id="nsec-out" rows="2" readonly hidden></textarea>
             <div class="result-actions">

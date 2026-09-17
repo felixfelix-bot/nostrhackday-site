@@ -1,3 +1,8 @@
+> **Superseded 2026-09-17** — the NIP-07 (browser-extension) upgrade path was
+> removed from the page by operator call: the ephemeral in-browser key is the
+> only signer, and the nsec is handed over the moment the key is mined. The
+> sections below are kept as the design record, not as current behaviour.
+
 # Nostr-Native Signup Form — Design
 
 **Project:** nostrhackday landing page (`/home/c03rad0r/repos/nostrhackday-site`)

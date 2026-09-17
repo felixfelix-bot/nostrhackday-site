@@ -6,7 +6,6 @@
  *   {type:'retarget', targetBits, workerIndex?}             ladder moved: top the nonce UP only
  *   {type:'sign', content, status}                          finish: (re-)mine nonce for the real
  *                                                           content, then sign with the worker-held key
- *   {type:'mineForPubkey', pubkey, targetBits, content}     NIP-07 path: nonce-only grind for a fixed key
  *   {type:'export'}                                         hand the ephemeral secret back (opt-in)
  *   {type:'stop'}                                           abandon all work
  *
@@ -241,25 +240,6 @@ self.onmessage = async (ev) => {
         const top = await mineTop(state.content, state.targetBits);
         const signed = signWithSecretKey({ ...state.template, tags: top.tags }, state.key.secretKey);
         post({ type: 'signed', event: signed, signature: signed.sig });
-        break;
-      }
-
-      case 'mineForPubkey': {
-        // NIP-07 upgrade: the visitor's own key stays in their extension. Its
-        // vanity prefix is whatever it is (the page refused the path if it does
-        // not clear the visible floor), so only the nonce part is ground here.
-        if (typeof msg.pubkey !== 'string') throw new Error('mineForPubkey needs a pubkey');
-        state.targetBits = Number.isFinite(msg.targetBits) ? msg.targetBits : state.targetBits;
-        state.content = typeof msg.content === 'string' ? msg.content : PLACEHOLDER_CONTENT;
-        state.createdAt = Math.floor(Date.now() / 1000);
-        const info = vanityInfo(msg.pubkey, state.params);
-        state.key = { pubkey: msg.pubkey, npub: info.npub, vanityBits: info.bits, vanityChars: info.chars, secretKey: null };
-        state.top = null;
-        state.template = null;
-        state.signer = 'nip07';
-        state.startedAt = Date.now();
-        await mineTop(state.content, state.targetBits, msg.pubkey);
-        postMined('nip07');
         break;
       }
 

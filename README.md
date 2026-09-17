@@ -62,7 +62,7 @@ spawn a second worker set.
    that with a real follow-up event, in both arrival orders.
 5. **The nsec handover is revealed with the form**, before any submission, so a
    visitor who never fills the form still leaves with their key. Importing the
-   nsec into a NIP-07 signer (nos2x, Alby, nostore) keeps the identical identity.
+   nsec into any nostr signer keeps the identical identity.
 
 The live seat counter (`#counter-seats`) stays on screen throughout.
 
