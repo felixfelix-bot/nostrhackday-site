@@ -370,6 +370,19 @@ a {
     border-radius: 2px;
 }
 
+/* the leading columns that spell the target: the grid is the SAME key the target
+   strip is filling in, so the matched columns are marked here too */
+.fingerprint-grid .cell-matched {
+    outline: 2px solid var(--nhd-green);
+    outline-offset: -2px;
+}
+
+/* the attempt log: a short, labelled list of the candidates that matched — not
+   a firehose of misses */
+.grind-attempts-label {
+    margin-bottom: 0.25rem;
+}
+
 .legend-vanity {
     background: var(--nhd-green-dim);
     border: 1px solid var(--nhd-green);

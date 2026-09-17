@@ -672,18 +672,27 @@ export async function mineVanityKey({
   // search space scrolling past (vanityInfo already encodes the npub for the
   // prefix test, so sampling costs no extra hashing).
   const samples = [];
+  // The closest candidate the search has seen so far: `chars` matched is the
+  // only thing that makes a candidate interesting, and the page shows THIS one
+  // in the identity grid. Reporting the newest raw attempt instead made the grid
+  // (a random npub) contradict the target strip (the best match so far).
+  let best = null;
   for (;;) {
     for (let i = 0; i < batch; i += 1) {
       const secretKey = deriveCandidate(seed, workerIndex, counter);
       counter += 1;
       const pubkey = getPublicKey(secretKey);
       const info = vanityInfo(pubkey, params);
+      if (!best || info.chars > best.chars) best = { npub: info.npub, chars: info.chars };
       if (info.chars >= params.vanityChars) {
         // prefix landed — now pay the cheap second floor. Scanning is 50 window
         // tests and only ever runs on a prefix hit, so it never touches the
         // hot loop's cost.
         const scan = scanLowEntropyWindows(info.npub, params);
         if (scan.found) {
+          // the winner wins the comparison too: a candidate that ties on prefix
+          // length but failed the raindrop must not outrank the key we hand over
+          best = { npub: info.npub, chars: info.chars };
           return {
             secretKey,
             pubkey,
@@ -698,6 +707,7 @@ export async function mineVanityKey({
             seed,
             workerIndex,
             endCounter: counter,
+            best: best ? { ...best } : null,
             samples: [...samples],
           };
         }
@@ -712,6 +722,7 @@ export async function mineVanityKey({
         tries: counter - startCounter,
         elapsedMs,
         keysPerSecond: elapsedMs > 0 ? Math.round(((counter - startCounter) / elapsedMs) * 1000) : 0,
+        best: best ? { ...best } : null,
         samples: [...samples],
       });
     }

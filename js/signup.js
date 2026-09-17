@@ -367,7 +367,7 @@ function startWorkers() {
             state.progress.workers[msg.workerIndex] = { tries: msg.tries, keysPerSecond: msg.keysPerSecond ?? 0 };
             tally();
             state.phase = 'mining-vanity';
-            (msg.samples ?? []).forEach((s) => viz?.push(s));
+            (msg.samples ?? []).forEach((s) => viz?.push(s, msg.best ?? null));
           } else {
             state.progress.nonceTries += 1;
             state.progress.hashesPerSecond = msg.hashesPerSecond ?? 0;

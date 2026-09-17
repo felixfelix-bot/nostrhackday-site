@@ -113,6 +113,22 @@ ladder regardless of what the page believes.
 `window.__nhd` exposes the live page state (`phase`, `npub`, `bits`,
 `nextRequiredBits`, `accepted`, `published`, `signed`) for the same reason.
 
+## the grid is a state, the attempt log is a log
+
+`#grind`'s identity grid shows the **closest candidate so far** — the `best`
+candidate `mineVanityKey()` reports with every progress tick — with the leading
+columns that spell the target marked green. It is monotonic: a newer, weaker
+attempt can never replace it. The newest raw attempts only reach the attempt log
+underneath, and only when they matched at least one character (a firehose of
+misses read as "the key being mined is not the one I asked for").
+
+After `found` the grid is **the mined key, frozen**: `viz.push()` stops painting,
+the frame that was already scheduled is cancelled, and `setFound()` claims the
+best slot — so a worker message still in flight cannot overwrite the npub whose
+nsec the visitor keeps. Verified on the shipped ladder by
+`~/worktrees/nostrhackday-e2e/run-e.mjs` (`?relays=` empties the relay list, so
+the grind is real but nothing is published).
+
 ## known relay notes (probed 2026-09-16)
 
 | relay | read | write | note |

@@ -104,15 +104,17 @@ function glowForChar(c, alpha) {
  *
  * @param {string|string[]} chars characters to show (e.g. the npub body)
  * @param {number} width how many characters the grid is sized for
- * @param {{window?: {start: number, length: number}}} [opts]
+ * @param {{window?: {start: number, length: number}, matched?: number}} [opts]
  *   a window (in `chars` coordinates) whose cells are ringed so the raindrop is
- *   legible in the grid as well as in the npub text
+ *   legible in the grid as well as in the npub text; `matched` marks the leading
+ *   columns that actually spell the target prefix
  */
 export function renderFingerprintGrid(chars, width = GRID_CHARS, opts = {}) {
   const list = Array.from(chars ?? []);
   const dim = Math.max(1, Math.ceil(Math.sqrt(Math.max(width, list.length))));
   const ws = opts.window ? Math.max(0, opts.window.start) : -1;
   const we = opts.window ? ws + Math.max(0, Math.floor(opts.window.length)) : -1;
+  const matched = Math.max(0, Math.floor(opts.matched ?? 0));
   let html = `<div class="fingerprint-grid" style="grid-template-columns: repeat(${dim}, 1fr);">`;
   for (let i = 0; i < list.length; i += 1) {
     const c = list[i];
@@ -121,8 +123,9 @@ export function renderFingerprintGrid(chars, width = GRID_CHARS, opts = {}) {
     const glowTight = glowForChar(c, 0.6);
     const delay = (i * 0.04).toFixed(2);
     const inWindow = ws >= 0 && i >= ws && i < we;
+    const inMatch = i < matched;
     html +=
-      `<div class="cell${inWindow ? ' cell-in-window' : ''}"` +
+      `<div class="cell${inWindow ? ' cell-in-window' : ''}${inMatch ? ' cell-matched' : ''}"` +
       `${inWindow ? ` data-window-pos="${i - ws + 1}"` : ''}` +
       ` style="background:${color};color:${textColorForChar(c)};` +
       `box-shadow:0 0 8px ${glow},0 0 3px ${glowTight};animation-delay:${delay}s;">${esc(c)}</div>`;
@@ -366,7 +369,7 @@ export function createGrindViz(
   // served HTML, not only something JS invents) — adopt it when it is there.
   const grid = el('div', 'grind-grid');
   const gridLabel = el('div', 'grind-grid-label');
-  gridLabel.appendChild(el('span', 'grind-grid-caption', 'current candidate — same character, same colour'));
+  gridLabel.appendChild(el('span', 'grind-grid-caption', 'closest candidate so far — same character, same colour'));
   const gridCandidate = el('span', 'grind-grid-candidate npub');
   gridLabel.appendChild(gridCandidate);
   const gridHost = root.querySelector('.fingerprint-grid-host') ?? el('div', 'fingerprint-grid-host');
@@ -378,8 +381,16 @@ export function createGrindViz(
   root.appendChild(grid);
   gridHost.innerHTML = renderFingerprintGrid('', gridChars);
 
+  // the attempt log: deliberately NOT a firehose. Twelve rows a second of
+  // near-misses reads as "the key being mined is not the one I asked for", so
+  // only candidates that matched at least one character get a row.
+  const attempts = el('div', 'grind-attempts');
+  attempts.appendChild(
+    el('p', 'grind-attempts-label muted small', 'recent attempts — only candidates that matched at least one character'),
+  );
   const strip = el('ul', 'grind-strip');
-  root.appendChild(strip);
+  attempts.appendChild(strip);
+  root.appendChild(attempts);
 
   const legend = el('p', 'grind-legend');
   legend.innerHTML =
@@ -392,6 +403,8 @@ export function createGrindViz(
   let finder = null;
   let gridFrame = 0;
   let pending = null;
+  /** the closest candidate so far — what the identity grid shows */
+  let gridBest = null;
 
   /** Window descriptor for the npub text/grid, from the miner's scan result. */
   function windowFromScan(scan) {
@@ -412,20 +425,25 @@ export function createGrindViz(
    */
   function paint(sample) {
     if (!sample?.npub) return;
+    // once a key exists, only that key may be drawn: a frame that was scheduled
+    // just before the find must not land on top of the mined npub
+    if (finder && sample.npub !== finder.npub) return;
     const body = npubBody(sample.npub);
-    paintGrid(body.slice(0, gridChars));
+    // the leading columns that spell the target are marked, so the grid reads as
+    // the same key the target strip is filling in
+    paintGrid(body.slice(0, gridChars), Math.min(sample.chars ?? 0, gridChars));
     gridCandidate.replaceChildren(
       ...renderNpub(`npub1${body.slice(0, Math.max(gridChars, 16))}…`, { chars: sample.chars ?? 0, floor, antiPhish }).childNodes,
     );
   }
 
-  function paintGrid(chars) {
+  function paintGrid(chars, matched = 0) {
     const list = Array.from(chars);
     const dim = Math.max(1, Math.ceil(Math.sqrt(gridChars)));
     const gridEl = gridHost.querySelector('.fingerprint-grid');
     const cells = gridEl ? Array.from(gridEl.children) : [];
     if (cells.length !== dim * dim) {
-      gridHost.innerHTML = renderFingerprintGrid(list, gridChars);
+      gridHost.innerHTML = renderFingerprintGrid(list, gridChars, { matched });
       return;
     }
     for (let i = 0; i < cells.length; i += 1) {
@@ -438,8 +456,9 @@ export function createGrindViz(
         cell.removeAttribute('style');
         continue;
       }
+      const cls = i < matched ? 'cell cell-matched' : 'cell';
+      if (cell.className !== cls) cell.className = cls;
       if (cell.textContent === c) continue;
-      cell.className = 'cell';
       cell.textContent = c;
       cell.style.background = colorForChar(c);
       cell.style.color = textColorForChar(c);
@@ -456,20 +475,31 @@ export function createGrindViz(
     });
   }
 
-  function push(sample) {
+  /**
+   * One progress tick of the search. The grid is a STATE, not a firehose: it
+   * shows the closest candidate so far — never a newer, weaker attempt — so it
+   * stays the same key the target strip is spelling out, and ends as the mined
+   * key. Only the attempt log below is fed raw candidates, and only the ones
+   * that matched.
+   */
+  function push(sample, best = null) {
     if (!sample?.npub) return;
-    // the live fingerprint of the candidate being tried right now
-    scheduleGridPaint(sample);
-    // the strip fills in as candidate prefixes actually match, so the visitor
-    // watches the target word get spelled out by real work
-    bumpMatched(sample.chars ?? 0);
-    const row = el('li', 'npub-row');
-    row.appendChild(renderNpub(sample.npub, { chars: sample.chars, floor, antiPhish }));
-    const score = el('span', 'npub-score', sample.chars ? `${sample.chars}/${floor}` : '');
-    row.appendChild(score);
-    if (sample.chars > 0) row.classList.add('npub-row-hit');
-    strip.prepend(row);
-    while (strip.childElementCount > rows) strip.removeChild(strip.lastElementChild);
+    // the grind is over: the mined key owns the grid, and a late message from a
+    // worker that was still in flight must not repaint it with a near-miss
+    if (finder) return;
+    const hero = best?.npub && (!gridBest || (best.chars ?? 0) >= gridBest.chars) ? best : gridBest;
+    if (hero) {
+      gridBest = hero;
+      scheduleGridPaint(hero);
+      bumpMatched(hero.chars ?? 0);
+    }
+    if ((sample.chars ?? 0) >= 1) {
+      const row = el('li', 'npub-row npub-row-hit');
+      row.appendChild(renderNpub(sample.npub, { chars: sample.chars, floor, antiPhish }));
+      row.appendChild(el('span', 'npub-score', `${sample.chars}/${floor}`));
+      strip.prepend(row);
+      while (strip.childElementCount > rows) strip.removeChild(strip.lastElementChild);
+    }
   }
 
   function setStats(next = {}) {
@@ -500,6 +530,14 @@ export function createGrindViz(
    */
   function setFound({ npub, chars, bits, scan }) {
     finder = { npub, chars, bits, scan };
+    // claim the best slot for the mined key: nothing may outrank it afterwards
+    gridBest = { npub, chars: chars ?? 0 };
+    // and drop the grid frame that was already scheduled before the find
+    if (gridFrame) {
+      cancelAnimationFrame(gridFrame);
+      gridFrame = 0;
+    }
+    pending = null;
     const win = windowFromScan(scan);
     bumpMatched(chars ?? 0);
     headlineNpub.replaceChildren(...renderNpub(npub, { chars, floor, antiPhish, window: win }).childNodes);
@@ -519,7 +557,7 @@ export function createGrindViz(
       const body = npubBody(npub);
       const shown = win ? Math.max(gridChars, win.start + win.length) : gridChars;
       gridHost.dataset.width = String(shown);
-      gridHost.innerHTML = renderFingerprintGrid(body.slice(0, shown), shown, { window: win });
+      gridHost.innerHTML = renderFingerprintGrid(body.slice(0, shown), shown, { window: win, matched: chars ?? 0 });
       gridCandidate.replaceChildren(
         ...renderNpub(`npub1${body.slice(0, Math.max(shown, 16))}…`, { chars, floor, antiPhish, window: win }).childNodes,
       );
@@ -543,6 +581,7 @@ export function createGrindViz(
 
   function reset() {
     strip.replaceChildren();
+    gridBest = null;
     matchedChars = 0;
     setTitle('Mine your RSVP');
     renderTargetStrip(targetWord, 0, target);
