@@ -37,8 +37,8 @@ import {
   shouldAutoPublishProof,
   vanityInfo,
   verifyRsvp,
-} from './pow-ratchet.js?v=8cea95bf77';
-import { createGrindViz, renderNpub } from './viz.js?v=8cea95bf77';
+} from './pow-ratchet.js?v=7d03f77f80';
+import { createGrindViz, renderNpub } from './viz.js?v=7d03f77f80';
 
 // ── configuration ────────────────────────────────────────────────────────────
 
@@ -363,7 +363,7 @@ function startWorkers() {
   };
 
   for (let index = 0; index < hw; index += 1) {
-    const worker = new Worker('./js/pow-worker.js?v=8cea95bf77', { type: 'module' });
+    const worker = new Worker('./js/pow-worker.js?v=7d03f77f80', { type: 'module' });
     workers.push(worker);
     state.progress.workers[index] = { tries: 0, keysPerSecond: 0 };
     worker.onmessage = (ev) => {

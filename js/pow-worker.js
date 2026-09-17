@@ -37,7 +37,7 @@ import {
   secretKeyToNsec,
   signWithSecretKey,
   vanityInfo,
-} from './pow-ratchet.js?v=8cea95bf77';
+} from './pow-ratchet.js?v=7d03f77f80';
 
 const PLACEHOLDER_CONTENT = '{}';
 /** how many keygens per progress tick — small enough to stay responsive */
