@@ -65,6 +65,7 @@ const SMALL = Object.freeze({
   cap: 8,
   step: 1,
   seatsPerStep: 2,
+  seats: 8,
   vanityChars: 1,
 });
 
@@ -128,11 +129,14 @@ test('ladder: shipped params expose an exact, monotonic, capped rung ladder', ()
     [0, 1, 2, 3, 4, 5, 12, 13].map((k) => requiredBits(k)),
     [16, 16, 17, 17, 18, 18, 22, 22],
   );
-  // ladder closes exactly at the cap
+  // the rung CLAMPS at the cap; the ladder closes on the SEAT count (45, the room)
   assert.equal(requiredBits(13), 22);
-  assert.equal(requiredBits(14), null);
+  assert.equal(requiredBits(14), 22, 'past the cap the rung stays at the cap');
+  assert.equal(requiredBits(44), 22);
+  assert.equal(requiredBits(45), null, 'no 46th seat');
   assert.equal(requiredBits(99), null);
-  assert.equal(ladderCapacity(), 14, '14 unvetted seats at base 16 / cap 22 / +1 per 2');
+  assert.equal(DEFAULT_PARAMS.seats, 45, 'c-base holds 45');
+  assert.equal(ladderCapacity(), 45, '45 unvetted seats: +1 bit per 2 up to the cap, then flat');
 
   // monotonic non-decreasing
   const rungs = ladderTable().map((r) => r.bits);
@@ -546,14 +550,15 @@ test('resolve: the SET rule is order-independent (shuffles and duplicates includ
   );
 });
 
-test('resolve: escalation is +1 bit per 2 accepted, and the ladder closes at the cap', async () => {
+test('resolve: escalation is +1 bit per 2 accepted, and the ladder closes on the seat count', async () => {
   // ---- shipped ladder: rung(k) = 16 + floor(k/2), floor 14 seats ------------
   assert.equal(requiredBits(0), 16);
   assert.equal(requiredBits(1), 16, 'still 16 after 1 accepted');
   assert.equal(requiredBits(2), 17, '+1 bit after 2 accepted');
   assert.equal(requiredBits(3), 17);
   assert.equal(requiredBits(4), 18, '+1 bit after 4 accepted');
-  assert.equal(requiredBits(14), null, 'no 15th seat');
+  assert.equal(requiredBits(14), 22, 'seat 15 sits at the cap rung');
+  assert.equal(requiredBits(45), null, 'no 46th seat');
 
   // ---- same escalation, observed end-to-end at test scale ------------------
   // The SET rule sorts by difficulty DESC and then accepts the longest prefix

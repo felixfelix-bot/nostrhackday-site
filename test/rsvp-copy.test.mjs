@@ -88,6 +88,15 @@ test('the panel invites before the click and narrates after it', () => {
   assert.equal(count(checkScript, 'Mine your RSVP'), 1, 'check-onepage.sh must assert the served title');
 });
 
+test('the redundant SIGN UP button is gone', () => {
+  assert.equal(count(indexHtml, 'SIGN UP'), 0, 'index.html still ships a SIGN UP button');
+  assert.equal(count(indexHtml, 'footer-signup-link'), 0, 'the footer signup link is still there');
+  assert.equal(count(checkScript, 'SIGN UP'), 0, 'check-onepage.sh still asserts SIGN UP');
+  assert.ok(count(indexHtml, 'id="cta-mine"') >= 1, 'the real gate (the RSVP button) stays');
+  const css = read('js/signup.css');
+  assert.equal(count(css, 'footer-signup-link'), 0, 'js/signup.css still styles the signup link');
+});
+
 test('the click is what flips the panel title', () => {
   assert.ok(count(vizJs, 'function setTitle') >= 1, 'js/viz.js needs a setTitle()');
   assert.ok(count(vizJs, 'setTitle,') >= 1, 'setTitle must be exported from the viz module');
