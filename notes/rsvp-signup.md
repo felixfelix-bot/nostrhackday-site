@@ -113,6 +113,27 @@ ladder regardless of what the page believes.
 `window.__nhd` exposes the live page state (`phase`, `npub`, `bits`,
 `nextRequiredBits`, `accepted`, `published`, `signed`) for the same reason.
 
+## the ladder has seats (45) and the counter only counts relays
+
+`DEFAULT_PARAMS.seats = 45` is the room; `cap = 22` bits is the highest rung. The
+rung still climbs +1 bit per 2 accepted unvetted RSVPs and then **clamps** at the
+cap — seats 12…44 all cost 2^22, so a 45-seat room does not make seat 43 cost
+2^38 (which no browser could mine). The ladder closes when the seats run out
+(`LADDER_FULL` on the 46th), not when the rung hits the cap.
+
+**The counter counts the store, so only events a relay actually holds may enter
+it.** Both publish paths (`onProof`, `onSigned`) publish FIRST and call
+`store.add(event)` only when at least one relay accepted (a dry run's synthetic
+`ok: true` entry keeps the offline/selftest flow working). The old order — add,
+then publish — is why "accepted 1" became 0 on reload (2026-09-17): the event had
+never reached a relay.
+
+**The write set is verified, not assumed** (probe 2026-09-17, `kind 1337`):
+`nostr.mom`, `offchain.pub`, `relay.primal.net` accept *and serve* it;
+`purplepag.es` answers `blocked: kind 1337 is not allowed` and
+`relay.orangesync.tech` wants NIP-42 auth (`auth-required: not authenticated`).
+Only the three verified relays are in `publishRelays`.
+
 ## releasing: stamp the assets
 
 ```

@@ -57,7 +57,7 @@ export const BECH32_CHARSET = 'qpzry9x8gf2tvdw0s3jn54khce6mua7l';
  * base 16 bits = 3 leet chars = 32^3 tries (~35-55 s single-thread at the
  *   ~850-1300 keys/s measured on the hackday laptop, ~10-20 s on 4 workers),
  *   times the 1.44x the raindrop window adds (see below)
- * cap  22 bits = the highest rung; the ladder then admits no further unvetted RSVPs
+ * cap  22 bits = the highest rung; past it every seat costs the same, until `seats` run out
  * step +1 bit (2×) per `seatsPerStep` (2) accepted unvetted RSVPs
  */
 export const DEFAULT_PARAMS = Object.freeze({
@@ -69,6 +69,8 @@ export const DEFAULT_PARAMS = Object.freeze({
   cap: 22,
   step: 1,
   seatsPerStep: 2,
+  /** the room: c-base holds 45. The rung clamps at `cap`, then seats run out. */
+  seats: 45,
 
   /** leet of "nostrhackday"; positions are mined left-to-right, 5 bits each. */
   vanityTarget: 'n05trh4ckd4y',
@@ -103,13 +105,19 @@ export const DEFAULT_PARAMS = Object.freeze({
 
   maxContentBytes: 4096,
 
-  /** write set — verified reachable/accepting by scripts/relay-probe.mjs */
+  /**
+   * Write set — only relays probed (2026-09-17) to ACCEPT **and SERVE** a
+   * kind-1337 event:
+   *   · nostr.mom / offchain.pub / relay.primal.net  accepted + served ✓
+   *   · purplepag.es          refused: "blocked: kind 1337 is not allowed"
+   *   · relay.orangesync.tech refused: "auth-required: not authenticated" (NIP-42)
+   * Publishing a seat to relays that cannot hold it is how "accepted 1" became 0
+   * on reload, so they are out of the write set. Reads may still use them.
+   */
   publishRelays: [
     'wss://nostr.mom',
     'wss://offchain.pub',
-    'wss://purplepag.es',
     'wss://relay.primal.net',
-    'wss://relay.orangesync.tech',
   ],
 });
 
@@ -150,8 +158,12 @@ const HEX128 = /^[0-9a-f]{128}$/;
  */
 export function requiredBits(k, params = DEFAULT_PARAMS) {
   if (!Number.isInteger(k) || k < 0) throw new TypeError(`requiredBits(k): k must be a non-negative integer, got ${k}`);
+  // `seats` is the room; `cap` is only the highest rung. Past the cap the rung
+  // CLAMPS — every further seat costs the same as the seat that reached it — so
+  // a 45-seat room does not make seat 43 cost 2^38.
+  if (Number.isInteger(params.seats) && k >= params.seats) return null;
   const bits = params.base + Math.floor(k / params.seatsPerStep) * params.step;
-  return bits > params.cap ? null : bits;
+  return Math.min(bits, params.cap);
 }
 
 /** How many unvetted RSVPs the ladder can ever admit. */
