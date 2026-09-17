@@ -37,8 +37,8 @@ import {
   shouldAutoPublishProof,
   vanityInfo,
   verifyRsvp,
-} from './pow-ratchet.js?v=ede1dcad9d';
-import { createGrindViz, renderNpub } from './viz.js?v=ede1dcad9d';
+} from './pow-ratchet.js?v=0026a5420a';
+import { createGrindViz, renderNpub } from './viz.js?v=0026a5420a';
 
 // ── configuration ────────────────────────────────────────────────────────────
 
@@ -303,10 +303,8 @@ function startMiningFromIntent() {
  * the grind head in js/viz.js) move together.
  */
 function setPanelTitle(running) {
-  const text = running ? 'Mining your RSVP' : 'Mine your RSVP';
   const label = $('mine-title-text');
-  if (label) label.textContent = text;
-  viz?.setTitle(text);
+  if (label) label.textContent = running ? 'Mining your RSVP' : 'Mine your RSVP';
 }
 
 /**
@@ -353,7 +351,7 @@ function startWorkers() {
   };
 
   for (let index = 0; index < hw; index += 1) {
-    const worker = new Worker('./js/pow-worker.js?v=ede1dcad9d', { type: 'module' });
+    const worker = new Worker('./js/pow-worker.js?v=0026a5420a', { type: 'module' });
     workers.push(worker);
     state.progress.workers[index] = { tries: 0, keysPerSecond: 0 };
     worker.onmessage = (ev) => {

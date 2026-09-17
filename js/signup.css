@@ -11,7 +11,7 @@
        a real mono face, never the display face (Manusquared). */
     --nhd-mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
     /* panel prose gets a readable sans stack; Manusquared stays for the display
-       headings (hero, .grind-title) where legibility is not the job. */
+       headings (hero, panel headings) where legibility is not the job. */
     --nhd-read: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Ubuntu, Cantarell, 'Helvetica Neue', Arial, sans-serif;
 }
 
@@ -787,12 +787,6 @@ body.onepage .card {
 }
 
 /* the mining counters are the headline numbers: make them loud */
-.grind-title {
-    font-weight: 800;
-    letter-spacing: 0.05em;
-    color: #ffb347;
-}
-
 .grind-stats .grind-stat dd {
     font-size: 1.15rem;
     font-weight: 700;

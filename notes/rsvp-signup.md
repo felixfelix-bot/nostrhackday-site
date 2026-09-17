@@ -113,6 +113,14 @@ ladder regardless of what the page believes.
 `window.__nhd` exposes the live page state (`phase`, `npub`, `bits`,
 `nextRequiredBits`, `accepted`, `published`, `signed`) for the same reason.
 
+## one title line, and it is the served heading
+
+The panel prints its title **once**: the `<span id="mine-title-text">` in `index.html`.
+The grind head carries only the dot and the state badge (`idle` → … → `found`) —
+it used to repeat the same words three lines under the heading (operator,
+2026-09-17). `setPanelTitle(running)` in `js/signup.js` is the single writer, and
+`js/viz.js` no longer has a `setTitle()` at all.
+
 ## the ladder has seats (45) and the counter only counts relays
 
 `DEFAULT_PARAMS.seats = 45` is the room; `cap = 22` bits is the highest rung. The
@@ -174,7 +182,7 @@ nsec shown without a click.
 | `wss://relay.damus.io` | ok | ok | |
 | `wss://purplepag.es` | ok | ok | profile/kind-focused, fine for kind 1337 |
 | `wss://relay.primal.net` | ok | untested | |
-| `wss://relay.orangesync.tech` | **auth-required** (NIP-42) | untested | needs NIP-42 auth before `REQ`; excluded from the default browser flow |
+| `wss://relay.orangesync.tech` | **auth-required** (NIP-42) | untested | needs NIP-42 auth before `REQ` — **out of the page's relay list** (the one list is both read and write) |
 
 `applesauce-relay`'s `RelayPool.subscription()` does not forward per-relay `EOSE`
 markers, so both the page and the collector settle on silence/event-count instead

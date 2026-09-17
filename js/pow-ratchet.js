@@ -112,7 +112,8 @@ export const DEFAULT_PARAMS = Object.freeze({
    *   · purplepag.es          refused: "blocked: kind 1337 is not allowed"
    *   · relay.orangesync.tech refused: "auth-required: not authenticated" (NIP-42)
    * Publishing a seat to relays that cannot hold it is how "accepted 1" became 0
-   * on reload, so they are out of the write set. Reads may still use them.
+   * on reload, so they are out of the relay list entirely — this one list is
+   * both what the page reads from and what it publishes to.
    */
   publishRelays: [
     'wss://nostr.mom',

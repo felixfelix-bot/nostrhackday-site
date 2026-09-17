@@ -40,7 +40,7 @@ export const ANTI_PHISH_CHARS = 4;
  */
 export const CHARSET = 'qpzry9x8gf2tvdw0s3jn54khce6mua7l';
 
-/** Tiny DOM helper — `el('span', 'grind-title', 'some text')`. */
+/** Tiny DOM helper — `el('span', 'grind-state', 'some text')`. */
 const el = (tag, cls, text) => {
   const node = document.createElement(tag);
   if (cls) node.className = cls;
@@ -203,10 +203,9 @@ export function createGrindViz(
   root.classList.add('grind-viz');
 
   const head = el('div', 'grind-head');
-  // the title is a state, not a label: it invites ("Mine your RSVP") until the
-  // visitor presses RSVP and narrates ("Mining your RSVP") from then on.
-  const titleEl = el('span', 'grind-title', 'Mine your RSVP');
-  head.appendChild(titleEl);
+  // ONE title line, and it is the panel heading in the served HTML — the head
+  // carries only the dot and the state badge (operator, 2026-09-17: the panel
+  // printed "MINE YOUR RSVP" twice within three lines).
   const stateBadge = el('span', 'grind-state', 'idle');
   head.appendChild(stateBadge);
   root.appendChild(head);
@@ -326,11 +325,6 @@ export function createGrindViz(
     root.dataset.state = cls || 'idle';
   }
 
-  /** Swap the panel title between the invitation and the running state. */
-  function setTitle(text) {
-    titleEl.textContent = text;
-  }
-
   /**
    * Show the winning key: full npub with the mined prefix, the anti-phish zone
    * and — when the miner hands over its raindrop scan — a ring around the
@@ -369,7 +363,6 @@ export function createGrindViz(
 
   function reset() {
     matchedChars = 0;
-    setTitle('Mine your RSVP');
     renderTargetStrip(targetWord, 0, target);
     headlineNpub.textContent = 'npub1…';
     headlineNsec.textContent = '';
@@ -385,7 +378,6 @@ export function createGrindViz(
     push,
     setStats,
     setState,
-    setTitle,
     setFound,
     setSecret,
     reset,
