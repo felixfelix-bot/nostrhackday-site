@@ -37,8 +37,8 @@ import {
   shouldAutoPublishProof,
   vanityInfo,
   verifyRsvp,
-} from './pow-ratchet.js?v=c6338d4992';
-import { createGrindViz, renderNpub } from './viz.js?v=c6338d4992';
+} from './pow-ratchet.js?v=4e09c6cb0a';
+import { createGrindViz, renderNpub } from './viz.js?v=4e09c6cb0a';
 
 // ── configuration ────────────────────────────────────────────────────────────
 
@@ -355,7 +355,7 @@ function startWorkers() {
   };
 
   for (let index = 0; index < hw; index += 1) {
-    const worker = new Worker('./js/pow-worker.js?v=c6338d4992', { type: 'module' });
+    const worker = new Worker('./js/pow-worker.js?v=4e09c6cb0a', { type: 'module' });
     workers.push(worker);
     state.progress.workers[index] = { tries: 0, keysPerSecond: 0 };
     worker.onmessage = (ev) => {
@@ -554,15 +554,17 @@ async function onProof(msg) {
   if (proof.published.some((p) => p.ok)) store.add(event);
 
   const ok = proof.published.filter((p) => p.ok).length;
+  state.formUnlocked = ok > 0;
   proof.status = ok ? 'published' : 'failed';
   state.phase = ok ? 'proof-published' : 'proof-failed';
   renderProof();
   revealFlow();
+  if (!state.formUnlocked) lockDetailsForm();
   setStatus(
     ok ? 'ok' : 'error',
     ok
       ? `proof of work published (${ok}/${proof.published.length} relays) — rung ${proof.rung}, ${verdict.bits} bits`
-      : 'the proof event did not reach any relay — no seat was taken. Your key is below; the form can try again.',
+      : 'the proof event did not reach any relay — no seat was taken, so the details form stays locked. Your key is below; reload to grind and publish again.',
     ok ? { href: njumpUrl(event.id), text: `${event.id.slice(0, 16)}…` } : null,
   );
   document.dispatchEvent(new CustomEvent('nhd:proof', { detail: { ok: !!ok, event, published: proof.published, rung: proof.rung } }));
@@ -602,6 +604,12 @@ function renderProof() {
  * carries the consent checkbox). The nsec handover is part of the reveal, so a
  * visitor who never fills the form still walks away with their key.
  */
+function lockDetailsForm() {
+  const panel = $('details-panel');
+  if (!panel) return;
+  panel.hidden = true;
+  for (const f of panel.querySelectorAll('input, textarea, button')) f.disabled = true;
+}
 function revealFlow() {
   if (state.revealed) return;
   state.revealed = true;
