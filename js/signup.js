@@ -37,8 +37,8 @@ import {
   shouldAutoPublishProof,
   vanityInfo,
   verifyRsvp,
-} from './pow-ratchet.js?v=0026a5420a';
-import { createGrindViz, renderNpub } from './viz.js?v=0026a5420a';
+} from './pow-ratchet.js?v=c6338d4992';
+import { createGrindViz, renderNpub } from './viz.js?v=c6338d4992';
 
 // ── configuration ────────────────────────────────────────────────────────────
 
@@ -52,8 +52,12 @@ const PARAMS = SELFTEST
   : DEFAULT_PARAMS;
 
 const RELAYS = qs.has('relays') ? qs.get('relays').split(',').filter(Boolean) : DRY_RUN ? [] : PARAMS.publishRelays;
-/** What we ask relays for (relays index multi-letter tags, so this narrows on the wire). */
-const RSVP_FILTER = { kinds: [PARAMS.kind], '#nhr': [PARAMS.eventTag] };
+/**
+ * REQ tag filter — INDEXED TAGS ONLY. `#nhr` is multi-letter and strfry relays
+ * refuse such a REQ ("unindexed tag filter"), so the counter read 0 forever.
+ * `t` is indexed; verifyRsvp + isHackdayEvent enforce the eventTag on read.
+ */
+const RSVP_FILTER = { kinds: [PARAMS.kind], '#t': [PARAMS.hashtag] };
 /**
  * What we ask the store for. NOTE: applesauce's reactive `store.timeline()`
  * model does not match multi-letter tag filters (`#nhr`) even though
@@ -351,7 +355,7 @@ function startWorkers() {
   };
 
   for (let index = 0; index < hw; index += 1) {
-    const worker = new Worker('./js/pow-worker.js?v=0026a5420a', { type: 'module' });
+    const worker = new Worker('./js/pow-worker.js?v=c6338d4992', { type: 'module' });
     workers.push(worker);
     state.progress.workers[index] = { tries: 0, keysPerSecond: 0 };
     worker.onmessage = (ev) => {

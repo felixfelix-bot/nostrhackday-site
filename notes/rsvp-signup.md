@@ -113,6 +113,15 @@ ladder regardless of what the page believes.
 `window.__nhd` exposes the live page state (`phase`, `npub`, `bits`,
 `nextRequiredBits`, `accepted`, `published`, `signed`) for the same reason.
 
+## the REQ must use INDEXED tags
+
+strfry relays (nostr.mom, offchain.pub, relay.primal.net) refuse a REQ on a
+multi-letter tag: `bad req: error parsing #nhr: unindexed tag filter`. The page
+used to ask for `#nhr`, so every REQ was refused and the counter read 0 no matter
+what was on the relays — looks exactly like an empty relay. It now asks for
+`#t = nostrhackday` (indexed) and `verifyRsvp` still requires the `nhr` tag.
+13 real RSVPs were invisible this way until 2026-09-17.
+
 ## one title line, and it is the served heading
 
 The panel prints its title **once**: the `<span id="mine-title-text">` in `index.html`.
