@@ -1,7 +1,8 @@
 # Nostrhackday
 
 **Let's Build on Nostr** — Tue **29.09.2026**, 10:00–18:30, c-base, Rungestraße 20, 10179 Berlin.
-Two days before bitcoin++ Berlin (payments edition, 01.10.–03.10.2026) — https://btcpp.dev/
+Two days before bitcoin++ Berlin (payments edition, 01.10.–03.10.2026) — https://btcpp.dev/berlin26
+The day before the Cashu Ecash Hackday (30.09.2026) — https://x.com/CashuBTC/status/2099845950768324657
 
 ## Live
 

@@ -4,7 +4,7 @@ set -uo pipefail
 cd "$(dirname "$0")/.."
 
 echo "== required strings in index.html =="
-for s in 'September 29th, 2026' '>Tuesday<' '29.09.2026' 'Two days before bitcoin++' 'https://btcpp.dev/' 'fingerprint-grid' 'MINING YOUR NPUB' 'SIGN UP'; do
+for s in 'September 29th, 2026' '>Tuesday<' '29.09.2026' 'Two days before bitcoin++' 'https://btcpp.dev/' 'https://btcpp.dev/berlin26' 'https://x.com/CashuBTC/status/2099845950768324657' 'Ecash Hackday' 'fingerprint-grid' 'MINING YOUR NPUB' 'SIGN UP'; do
   n=$(grep -c -F -- "$s" index.html)
   printf '  %-28s %s\n' "$s" "$n"
 done
