@@ -292,7 +292,10 @@ export function createGrindViz(
   root.classList.add('grind-viz');
 
   const head = el('div', 'grind-head');
-  head.appendChild(el('span', 'grind-title', 'Mining your RSVP'));
+  // the title is a state, not a label: it invites ("Mine your RSVP") until the
+  // visitor presses RSVP and narrates ("Mining your RSVP") from then on.
+  const titleEl = el('span', 'grind-title', 'Mine your RSVP');
+  head.appendChild(titleEl);
   const stateBadge = el('span', 'grind-state', 'starting…');
   head.appendChild(stateBadge);
   root.appendChild(head);
@@ -485,6 +488,11 @@ export function createGrindViz(
     root.dataset.state = cls || 'idle';
   }
 
+  /** Swap the panel title between the invitation and the running state. */
+  function setTitle(text) {
+    titleEl.textContent = text;
+  }
+
   /**
    * Show the winning key: full npub with the mined prefix, the anti-phish zone
    * and — when the miner hands over its raindrop scan — a ring around the
@@ -536,6 +544,7 @@ export function createGrindViz(
   function reset() {
     strip.replaceChildren();
     matchedChars = 0;
+    setTitle('Mine your RSVP');
     renderTargetStrip(targetWord, 0, target);
     headlineNpub.textContent = 'npub1…';
     headlineNsec.textContent = '';
@@ -555,6 +564,7 @@ export function createGrindViz(
     push,
     setStats,
     setState,
+    setTitle,
     setFound,
     setSecret,
     reset,

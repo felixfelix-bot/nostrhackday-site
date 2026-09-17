@@ -54,17 +54,50 @@ test('the .mine-lead mining explainer is removed from index.html', () => {
 
 // ── 2. the panel title ───────────────────────────────────────────────────────
 
-test('the panel title is "Mining your RSVP" everywhere it is written', () => {
+test('the panel invites before the click and narrates after it', () => {
   assert.equal(count(indexHtml, 'MINING YOUR NPUB'), 0, 'index.html still ships the caps title');
   assert.equal(count(vizJs, 'MINING YOUR NPUB'), 0, 'js/viz.js still ships the caps title');
-  assert.equal(count(indexHtml, 'Mining your RSVP'), 1);
-  assert.equal(count(vizJs, 'Mining your RSVP'), 1);
+  // served markup: the invitation — nothing has been mined yet
+  assert.equal(
+    count(indexHtml, '<span id="mine-title-text">Mine your RSVP</span>'),
+    1,
+    'the served title must invite the click',
+  );
+  assert.equal(
+    count(indexHtml, 'Mining your RSVP'),
+    0,
+    'the running title must not be the served default — it appears only after the click',
+  );
+  assert.equal(
+    count(vizJs, "'Mine your RSVP'"),
+    2,
+    'js/viz.js starts in the inviting state (initial render + reset)',
+  );
+  // the two states live in ONE place (setPanelTitle in js/signup.js): the viz
+  // takes the text it is handed, so there is a single source for the pair.
   assert.equal(
     count(checkScript, 'MINING YOUR NPUB'),
     0,
     'scripts/check-onepage.sh still asserts the old string',
   );
-  assert.equal(count(checkScript, 'Mining your RSVP'), 1, 'check-onepage.sh must assert the new title');
+  assert.equal(count(checkScript, 'Mine your RSVP'), 1, 'check-onepage.sh must assert the served title');
+});
+
+test('the click is what flips the panel title', () => {
+  assert.ok(count(vizJs, 'function setTitle') >= 1, 'js/viz.js needs a setTitle()');
+  assert.ok(count(vizJs, 'setTitle,') >= 1, 'setTitle must be exported from the viz module');
+  assert.ok(
+    count(signupJs, 'setPanelTitle(true)') >= 1,
+    'the RSVP press must flip the panel into the running title',
+  );
+  assert.ok(
+    count(signupJs, "running ? 'Mining your RSVP' : 'Mine your RSVP'") >= 1,
+    'both title states must live in one function',
+  );
+  assert.ok(
+    count(signupJs, "'Mining your RSVP'") >= 1 && count(signupJs, "'Mine your RSVP'") >= 1,
+    'the running and inviting titles must both be defined',
+  );
 });
 
 // ── 3. the legend, shorter ───────────────────────────────────────────────────

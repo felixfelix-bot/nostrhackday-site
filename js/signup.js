@@ -300,6 +300,19 @@ function startMiningFromIntent() {
 }
 
 /**
+ * The panel title is a state. Before the press it invites — "Mine your RSVP" —
+ * and from the press on it narrates what the browser is doing — "Mining your
+ * RSVP". Both places the title is written (the panel heading in index.html and
+ * the grind head in js/viz.js) move together.
+ */
+function setPanelTitle(running) {
+  const text = running ? 'Mining your RSVP' : 'Mine your RSVP';
+  const label = $('mine-title-text');
+  if (label) label.textContent = text;
+  viz?.setTitle(text);
+}
+
+/**
  * The RSVP button: press => intent => grind, then show the mining panel. The
  * panel (not the button) is where the visitor watches and later hands over keys.
  */
@@ -307,6 +320,8 @@ function onRsvpPress(ev) {
   ev?.preventDefault?.();
   state.intent = true;
   const started = startMiningFromIntent();
+  // the invite becomes the live state the instant the grind is ours to run
+  if (started) setPanelTitle(true);
   // move the visitor to the panel they just started
   $('signup')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   $('mining')?.focus({ preventScroll: true });
