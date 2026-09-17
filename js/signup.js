@@ -28,7 +28,6 @@ import {
   DEFAULT_PARAMS,
   buildTags,
   describeRsvp,
-  ladderTable,
   lowEntropyLabel,
   requiredBits,
   resolve,
@@ -567,22 +566,9 @@ async function detectNip07() {
 // ── wiring ───────────────────────────────────────────────────────────────────
 
 function initViz() {
-  const ladder = ladderTable();
   viz = createGrindViz($('grind'), { floor: PARAMS.vanityChars });
   viz.setStats({ target: PARAMS.base, elapsedMs: 0, tries: 0, keysPerSecond: 0, phase: 'vanity grind' });
   state.progress.startedAt = Date.now();
-  $('ladder').replaceChildren(
-    ...ladder.map((rung) => {
-      const li = document.createElement('li');
-      li.className = 'ladder-rung';
-      li.dataset.bits = String(rung.bits);
-      li.textContent = `${rung.seats} seat${rung.seats > 1 ? 's' : ''} → ${rung.bits} bits`;
-      return li;
-    }),
-  );
-  $('cap-note').textContent =
-    `Ladder: ${PARAMS.base} bits at the floor, +${PARAMS.step} bit every ${PARAMS.seatsPerStep} accepted RSVPs, ` +
-    `capped at ${PARAMS.cap} bits (${ladder.length} unvetted seats). Vetted org keys sit at the floor and do not consume seats.`;
 }
 
 function initForm() {

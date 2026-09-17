@@ -64,25 +64,6 @@
 
     <!-- ── everything below is the RSVP: form + live mining ─────────────── -->
     <section class="signup-body" id="signup">
-        <!-- ── what this is ─────────────────────────────────────────────── -->
-        <section class="panel" id="intro">
-            <h2>Sign up with proof of work</h2>
-            <p>
-                No accounts, no server. Your RSVP is a <strong>nostr event (kind 1337)</strong> signed
-                by a key generated in this tab that <em>never leaves it</em>. To be counted it must
-                carry real work: a <strong>leet npub prefix</strong> you can check with your own eyes
-                (<span class="npub"><span class="npub-vanity">n05</span></span>…) plus a
-                <strong>NIP-13 nonce</strong> meeting the current rung.
-            </p>
-            <p class="muted small">
-                The counter is live — an applesauce <code>EventStore</code> fed by public relays.
-                Verification also runs locally: the id is recomputed, the signature checked, the
-                leading zero bits counted. The declared nonce is never trusted.
-            </p>
-            <ul class="ladder" id="ladder"></ul>
-            <p class="muted small" id="cap-note"></p>
-        </section>
-
         <!-- ── the grinding ─────────────────────────────────────────────── -->
         <section class="panel mine-panel" id="mining">
             <h2 class="mine-title">MINING YOUR NPUB <span class="mine-badge">live proof of work</span></h2>
