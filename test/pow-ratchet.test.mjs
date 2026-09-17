@@ -20,6 +20,7 @@ import {
   BECH32_CHARSET,
   DEFAULT_PARAMS,
   PROOF_STATUS,
+  PROOF_VERSION,
   REASONS,
   buildEventTemplate,
   buildProofContent,
@@ -29,6 +30,7 @@ import {
   canStartMining,
   computeEventId,
   deriveCandidate,
+  describeRsvp,
   difficultyOf,
   expectedUnique,
   ladderCapacity,
@@ -39,6 +41,7 @@ import {
   mineProofEvent,
   mineVanityKey,
   nonceTag,
+  proofHumanLine,
   randomSeed,
   requiredBits,
   resolve,
@@ -706,6 +709,17 @@ async function makeProof({ targetBits = 0, createdAt, params = SMALL } = {}) {
   return { ...proof, mined, info };
 }
 
+/**
+ * The proof content is `<human-readable line>\n<machine JSON>` (copy v3). This
+ * splits it exactly the way a reader or a client does: the human line is
+ * everything before the first `\n`, the JSON payload is everything after it.
+ */
+function proofParts(content) {
+  const cut = content.indexOf('\n');
+  assert.ok(cut > 0, 'the proof content carries a human line before the JSON');
+  return { human: content.slice(0, cut), json: content.slice(cut + 1), cut };
+}
+
 test('flow v2: the proof event is kind 1337 with EXACTLY the programmatic tag set and zero personal fields', async () => {
   const { event, nonce, mined } = await makeProof({ targetBits: 1, createdAt: 900 });
 
@@ -722,11 +736,21 @@ test('flow v2: the proof event is kind 1337 with EXACTLY the programmatic tag se
   ]);
   assert.deepEqual(event.tags.map((t) => t[0]), ['t', 'nhr', 'status', 'client', 'nonce']);
 
-  // ...and the content is exactly the machine proof text (bits / nonce / npub prefix).
-  const data = JSON.parse(event.content);
+  // ...and the content is a human line followed by exactly the machine proof
+  // text (bits / nonce / npub prefix). The line is pure pre-grind facts.
+  const { human, json } = proofParts(event.content);
+  assert.equal(human, proofHumanLine({ bits: 1, params: SMALL }), 'the human line is the pure builder line');
+  assert.equal(
+    human,
+    `RSVPed to ${SMALL.hashtag} — mined this key live in my browser: 1 bits of work (nonce + leet npub prefix).`,
+    'the human line is a constant sentence — byte-exact',
+  );
+
+  const data = JSON.parse(json, 'the JSON payload sits after the first newline');
   assert.deepEqual(Object.keys(data), ['v', 'proof', 'event', 'bits', 'nonce', 'npub']);
+  assert.equal(PROOF_VERSION, 3, 'the shipped proof-content version');
   assert.deepEqual(data, {
-    v: 2,
+    v: 3,
     proof: 1,
     event: SMALL.eventTag,
     bits: 1,
@@ -762,10 +786,71 @@ test('flow v2: the proof event is kind 1337 with EXACTLY the programmatic tag se
   assert.deepEqual(buildProofTags({ params: SMALL, nonce, bits: 1, status: PROOF_STATUS }), event.tags);
 });
 
+test('copy v3: the human line precedes the JSON and the nonce digits stay the only varying bytes', () => {
+  // The shipped shape at REAL scale, byte for byte: one human line, one JSON line.
+  const real = buildProofContent({ bits: 16, nonce: '424242', npubPrefix: 'npub1n05', params: DEFAULT_PARAMS });
+  assert.equal(PROOF_VERSION, 3, 'the proof-content version is 3');
+  assert.equal(
+    real,
+    'RSVPed to nostrhackday — mined this key live in my browser: 16 bits of work (nonce + leet npub prefix).\n' +
+      '{"v":3,"proof":1,"event":"2026-09-29-berlin","bits":16,"nonce":"424242","npub":"npub1n05"}',
+  );
+  assert.equal(real.split('\n').length, 2, 'exactly two lines: human, then machine');
+
+  // the substring AFTER the first \n is the documented JSON payload
+  const { human, json } = proofParts(real);
+  const data = JSON.parse(json);
+  assert.deepEqual(Object.keys(data), ['v', 'proof', 'event', 'bits', 'nonce', 'npub']);
+  assert.equal(data.v, 3);
+  assert.equal(data.proof, 1);
+  assert.equal(data.event, DEFAULT_PARAMS.eventTag);
+  assert.equal(data.bits, 16);
+  assert.equal(data.nonce, '424242');
+  assert.equal(data.npub, 'npub1n05');
+  assert.ok(real.startsWith(proofHumanLine({ bits: 16 }) + '\n{'), 'human line first, JSON second');
+
+  // impersonal and tiny: still far under the cap the verifier enforces
+  for (const personal of ['name', 'alias', 'intent', 'skill', 'idea', 'diet', 'contact', 'email', 'ua', 'userAgent']) {
+    assert.ok(!(personal in data), `the proof content must not carry \`${personal}\``);
+    assert.ok(!human.toLowerCase().includes(personal), `the human line must not carry \`${personal}\``);
+  }
+  assert.ok(real.length < DEFAULT_PARAMS.maxContentBytes, `${real.length} bytes < ${DEFAULT_PARAMS.maxContentBytes}`);
+
+  // The grind invariant: with every other input fixed, the head (human line +
+  // JSON up to the nonce) and the tail agree for different nonces, so the nonce
+  // digits remain the ONLY varying byte range — which is what keeps the
+  // `head + counter + tail` grind and the ground-id == rebuilt-id check honest.
+  const around = (content) => {
+    const key = '"nonce":"';
+    const open = content.indexOf(key) + key.length;
+    return [content.slice(0, open), content.slice(content.indexOf('"', open))];
+  };
+  const a = buildProofContent({ bits: 1, nonce: '7', npubPrefix: 'npub1n', params: SMALL });
+  const b = buildProofContent({ bits: 1, nonce: '999999', npubPrefix: 'npub1n', params: SMALL });
+  assert.deepEqual(around(a), around(b), 'only the nonce digits vary between two grinds');
+  assert.equal(proofParts(a).human, proofParts(b).human, 'the human line is a pre-grind fact');
+  assert.ok(around(a)[0].includes('1 bits of work'), 'the human line sits inside the constant head');
+
+  // describeRsvp (seat list + the org collection script) reads the payload from
+  // below the human line instead of choking on it
+  assert.deepEqual(describeRsvp({ content: real, tags: [['status', PROOF_STATUS]] }), {
+    name: null,
+    alias: null,
+    intent: null,
+    status: PROOF_STATUS,
+    idea: null,
+    contact: null,
+    diet: null,
+  });
+  // ground id == rebuilt id in the new shape is asserted by the two flow tests
+  // above (buildProofEvent == mined event, and id recomputation), and the
+  // 'builder drift' throw in mineProofEvent enforces it at grind time.
+});
+
 test('flow v2: the proof verifies against the rung by recomputation (a declared nonce is never trusted)', async () => {
   const bits = 1;
   const { event, mined } = await makeProof({ targetBits: bits, createdAt: 1234 });
-  const data = JSON.parse(event.content);
+  const data = JSON.parse(proofParts(event.content).json);
   const tag = nonceTag(event);
 
   // content and tag state the SAME nonce, and it is the top-up we ground for

@@ -38,9 +38,12 @@ spawn a second worker set.
    previous person's work).
 2. **The moment the key clears the current rung, the page publishes a `kind 1337`
    PROOF event by itself.** No click, no form, no consent checkbox — because it
-   carries nothing personal. The content is machine-generated only
-   (`{"v":2,"proof":1,"event":…,"bits":…,"nonce":…,"npub":…}`, where `npub` is
-   the mined *prefix*), and the tags
+   carries nothing personal. The content is one human-readable line followed by
+   the machine proof text —
+   `RSVPed to nostrhackday — mined this key live in my browser: 16 bits of work (nonce + leet npub prefix).`
+   then `{"v":3,"proof":1,"event":…,"bits":…,"nonce":…,"npub":…}` (where `npub`
+   is the mined *prefix*, and the nonce digits are the only varying bytes). The
+   tags
    are exactly the programmatic ones a valid RSVP
    gets (`t`, the event marker, `status`, `client`, `nonce`) — no name, alias,
    intent, contact or user agent, ever.

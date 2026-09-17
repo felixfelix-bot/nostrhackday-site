@@ -491,13 +491,28 @@ function betterOf(a, b) {
   return a.id < b.id ? a : b;
 }
 
+/**
+ * Parse an RSVP's content into an object. Content is normally a bare JSON object,
+ * but copy v3 proof events are `<human line>\n<json>` (see proofHumanLine), so the
+ * payload below the first newline is tried as well. Never throws.
+ */
+function parseContentData(content) {
+  if (typeof content !== 'string' || !content) return {};
+  const candidates = [content];
+  const cut = content.indexOf('\n');
+  if (cut >= 0) candidates.push(content.slice(cut + 1));
+  for (const candidate of candidates) {
+    try {
+      const parsed = JSON.parse(candidate);
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) return parsed;
+    } catch { /* content is free-form; try the next candidate */ }
+  }
+  return {};
+}
+
 /** Human-readable view of an RSVP's content JSON (all fields optional). */
 export function describeRsvp(event) {
-  let data = {};
-  try {
-    const parsed = JSON.parse(event.content || '{}');
-    if (parsed && typeof parsed === 'object') data = parsed;
-  } catch { /* content is free-form JSON; ignore parse failures */ }
+  const data = parseContentData(event.content);
   const status = event.tags.find((t) => t[0] === 'status')?.[1] ?? null;
   return {
     name: typeof data.name === 'string' ? data.name : null,
@@ -815,10 +830,27 @@ export async function mineNonce({
 // ─────────────────────────────────────────────────────────────────────────────
 
 /** Version of the machine proof content (bumped if its shape ever changes). */
-export const PROOF_VERSION = 2;
+export const PROOF_VERSION = 3;
 
 /** Status tag carried by the unattended proof event. */
 export const PROOF_STATUS = 'accepted';
+
+/**
+ * The human-readable FIRST LINE of the proof content (copy v3).
+ *
+ * It exists because a bare JSON blob reads like telemetry: a human who opens the
+ * event on njump should see, in one sentence, what was mined and why it is a
+ * proof. Every fact on the line is FIXED BEFORE the nonce grind starts — the
+ * event name and the committed bits, nothing mined — so the nonce digits stay the
+ * only varying byte range of the content the grind hashes.
+ *
+ * Deliberately impersonal: no name, alias, intent, contact or full npub. It is
+ * the same text for every visitor and carries no information about who they are.
+ */
+export function proofHumanLine({ bits = 0, params = DEFAULT_PARAMS } = {}) {
+  const declared = Math.max(0, Math.floor(Number(bits) || 0));
+  return `RSVPed to ${params.hashtag} — mined this key live in my browser: ${declared} bits of work (nonce + leet npub prefix).`;
+}
 
 /**
  * The proof content, as head/tail around the bare nonce digits. Building the
@@ -827,13 +859,19 @@ export const PROOF_STATUS = 'accepted';
  */
 function proofContentHeadTail({ bits = 0, npubPrefix = '', params = DEFAULT_PARAMS } = {}) {
   const declared = Math.max(0, Math.floor(Number(bits) || 0));
-  const head = `{"v":${PROOF_VERSION},"proof":1,"event":${JSON.stringify(params.eventTag)},"bits":${declared},"nonce":"`;
+  // The head is `${human line}\n${json up to the nonce}`: fixed text, so the
+  // counter that follows it remains the single varying byte range.
+  const head =
+    `${proofHumanLine({ bits: declared, params })}\n` +
+    `{"v":${PROOF_VERSION},"proof":1,"event":${JSON.stringify(params.eventTag)},"bits":${declared},"nonce":"`;
   const tail = `","npub":${JSON.stringify(String(npubPrefix ?? ''))}}`;
   return { head, tail, declared };
 }
 
 /**
- * Machine-generated proof text — deliberately tiny and impersonal:
+ * Machine-generated proof text — deliberately tiny and impersonal. One human
+ * line (see proofHumanLine), then the JSON payload:
+ *   RSVPed to nostrhackday — mined this key live in my browser: 16 bits of work (nonce + leet npub prefix).
  *   v     — proof-content version
  *   proof — 1: this is a mining proof, not a human RSVP
  *   event — the event marker (2026-09-29-berlin); markers stay in tags, nowhere else
