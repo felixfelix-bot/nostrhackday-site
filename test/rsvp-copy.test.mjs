@@ -69,14 +69,9 @@ test('the panel invites before the click and narrates after it', () => {
     'the running title must not be the served default — it appears only after the click',
   );
   assert.equal(
-    count(vizJs, "el('span', 'grind-title', 'Mine your RSVP')"),
-    1,
-    'js/viz.js must render the inviting title first',
-  );
-  assert.equal(
-    count(vizJs, "setTitle('Mine your RSVP')"),
-    1,
-    'js/viz.js must return to the inviting title on reset',
+    count(vizJs, 'grind-title'),
+    0,
+    'the panel must print its title ONCE — the served h2, not the grind head',
   );
   // the two states live in ONE place (setPanelTitle in js/signup.js): the viz
   // takes the text it is handed, so there is a single source for the pair.
@@ -98,8 +93,7 @@ test('the redundant SIGN UP button is gone', () => {
 });
 
 test('the click is what flips the panel title', () => {
-  assert.ok(count(vizJs, 'function setTitle') >= 1, 'js/viz.js needs a setTitle()');
-  assert.ok(count(vizJs, 'setTitle,') >= 1, 'setTitle must be exported from the viz module');
+  assert.ok(count(vizJs, 'setTitle') === 0, 'the viz module no longer owns the title');
   assert.ok(
     count(signupJs, 'setPanelTitle(true)') >= 1,
     'the RSVP press must flip the panel into the running title',

@@ -114,9 +114,9 @@ test('the panel keeps the parts a demo can explain', () => {
   assert.ok(count(indexHtml, 'mine-bar') >= 1, 'the progress bar stays');
   assert.ok(count(indexHtml, 'mine-label') >= 1, 'the live counter label stays');
   assert.ok(count(vizJs, 'grind-stats') >= 1, 'the live stats stay');
-  assert.ok(count(vizJs, "el('span', 'grind-title'") >= 1, 'the title stays');
+  assert.ok(count(vizJs, 'grind-title') === 0, 'the head does not repeat the panel title');
+  assert.ok(count(vizJs, "el('span', 'grind-state', 'idle')") >= 1, 'the state badge stays');
   assert.ok(count(vizJs, 'grind-headline-npub') >= 1, 'the mined npub stays');
   assert.ok(count(vizJs, 'raindrop-badge') >= 1, 'the raindrop badge stays');
   assert.ok(count(vizJs, 'function setSecret') >= 1, 'the nsec handover stays');
-  assert.ok(count(vizJs, 'function setTitle') >= 1, 'the invite/running title stays');
 });
