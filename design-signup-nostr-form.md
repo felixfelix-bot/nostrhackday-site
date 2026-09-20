@@ -31,6 +31,13 @@ Deployment targets (both must work): **GitHub Pages** + **nsyte/nsite** single s
 - **⚠ VERIFY:** `1337` is occasionally used as an ad-hoc dev/test kind. De-risk by opening a PR
   to register `1337` in the NIP registry (`kinds.md`) under "nostrhackday RSVP / event signup".
   The number alone does not guarantee collision-freedom; registration does.
+  - **RESOLVED 2026-09-20 — CONFLICT, not free.** `1337` is *already registered* as **Code
+    Snippet** (NIP-C0) in both live registries — `registry-of-kinds/schema.yaml` L1044
+    (`in_use: true`) and the nips `README.md` Event Kinds table L175 — and is in real
+    production use (440 of the first 500 kind-1337 events served by `nostr.mom` are C0 code
+    snippets; 47 are our seat proofs). The proposed registration is therefore impossible and
+    **nothing was posted upstream**. Findings, live collision counts, a drafted registry
+    entry for a free kind and the exact PR text: `docs/KIND-1337-REGISTRY-DRAFT.md`.
 
 ### Example event
 
