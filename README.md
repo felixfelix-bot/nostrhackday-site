@@ -89,6 +89,33 @@ otherwise keep serving the previous copy:
 ssh debian@23.182.128.51 'docker restart tollgate-nsite-gateway'
 ```
 
+## Custom domain (`nostrhackday.orangesync.tech`)
+
+Served on `testserver2` (23.182.128.51) by Caddy in front of the nsite gateway, with the
+`Host` header rewritten to the site's npub hostname so the short name stays in the address
+bar. **Three pieces must all hold on the VPS:**
+
+1. **Caddy** site block with `tls { on_demand }` and
+   `reverse_proxy localhost:3002 { header_up Host <npub>.nsite.orangesync.tech }`.
+2. The **on-demand ask endpoint** on `127.0.0.1:6799` must answer **200** for this FQDN — its
+   allowlist is `TLS_ASK_ALLOWED_SUFFIXES` in `/home/debian/preview-infra/preview_gateway.py`.
+   A **403** there means Caddy never issues a certificate and every HTTPS request dies with
+   `SSL_ERROR_INTERNAL_ERROR_ALERT` (`curl: (35)`), while the same site keeps serving fine at
+   its npub URL. That is exactly how the domain broke on **2026-09-24**.
+3. **Only one process may own port 6799.** The legacy `nsite-ask.service` (a 557-byte script
+   that allows only `*.nsite.orangesync.tech`) was re-enabled on 2026-09-21, took the port, and
+   pushed `preview-gateway` into an `Address already in use` crash loop — all custom domains
+   lost TLS while `*.nsite.orangesync.tech` kept working. Its unit file is now parked at
+   `/etc/systemd/system/nsite-ask.service.disabled`. **Do not re-enable it.**
+
+Verify from anywhere:
+
+```bash
+curl -sS -o /dev/null -w '%{http_code}\n' https://nostrhackday.orangesync.tech/     # 200
+ssh debian@23.182.128.51 "curl -s -o /dev/null -w '%{http_code}\n' \
+  'http://127.0.0.1:6799/ask?domain=nostrhackday.orangesync.tech'"                    # must be 200
+```
+
 ## GitHub Pages
 
 Push to `main`; the workflow in `.github/workflows/` builds and deploys.
